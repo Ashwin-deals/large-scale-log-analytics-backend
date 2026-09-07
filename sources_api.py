@@ -42,6 +42,7 @@ def _serialize(doc):
         "source": doc.get("source", "Manual Upload"),
         "size_bytes": doc.get("size_bytes", 0),
         "records": doc.get("records"),
+        "total_lines": doc.get("total_lines"),
         "status": doc.get("status", "processing"),
         "error": doc.get("error"),
         "uploaded_at": doc["uploaded_at"].isoformat() if doc.get("uploaded_at") else None,
@@ -50,13 +51,31 @@ def _serialize(doc):
 
 
 def _process_upload(upload_id, stored_path):
-    """Parse the saved file and record how many log lines it yielded."""
+    """Parse the saved file and record how many log lines were recognized.
+
+    The parser never rejects a line: anything it cannot match comes back as a
+    row of nulls with event_type "OTHER". Counting rows would therefore report
+    a plain CSV as successfully ingested with one "record" per line, so count
+    only lines that actually matched the HDFS format and fail the upload when
+    none of them did.
+    """
     try:
         frame = HDFSParser().parse(str(stored_path))
-        uploads.update_one(
-            {"_id": upload_id},
-            {"$set": {"status": "processed", "records": int(len(frame)), "processed_at": datetime.now(timezone.utc)}},
-        )
+        total_lines = int(len(frame))
+        recognized = int(frame["date"].notna().sum()) if total_lines else 0
+
+        if recognized == 0:
+            update = {
+                "status": "failed",
+                "records": 0,
+                "total_lines": total_lines,
+                "error": "No lines matched the HDFS log format — this file does not look like an HDFS log.",
+            }
+        else:
+            update = {"status": "processed", "records": recognized, "total_lines": total_lines}
+
+        update["processed_at"] = datetime.now(timezone.utc)
+        uploads.update_one({"_id": upload_id}, {"$set": update})
     except Exception as exc:  # noqa: BLE001 - surfaced to the user via the row's status
         uploads.update_one(
             {"_id": upload_id},
