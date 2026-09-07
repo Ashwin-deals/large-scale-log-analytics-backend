@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT_DIR))
 
 from detection.evaluate import DEFAULT_METRICS_PATH as V1_METRICS_PATH
 from detection.evaluate import evaluate, print_metrics_table
+from detection.isolation_forest import save_model
 from detection.predict import predict
 from detection.train import load_labeled_features
 from optimization.ga_isolation_forest import (
@@ -82,7 +83,7 @@ def main() -> None:
     model.fit(merged[selected_features])
 
     V2_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, V2_MODEL_PATH)
+    save_model(model, V2_MODEL_PATH)
     print(f"Saved candidate model to {V2_MODEL_PATH}")
 
     predictions = predict(

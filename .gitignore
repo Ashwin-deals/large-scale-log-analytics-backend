@@ -130,3 +130,6 @@ data/processed/dataset_stats.json
 
 # Files uploaded through the Log Sources page (user content, any extension).
 data/uploads/
+
+# Held-out test split: generated data + models, never committed.
+data/testing/

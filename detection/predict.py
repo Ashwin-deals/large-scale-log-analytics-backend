@@ -1,12 +1,43 @@
+import warnings
 from pathlib import Path
 
 import pandas as pd
 
 from detection.isolation_forest import TRAINING_FEATURE_COLUMNS
+from feature_engineering.category_encoder import CategoryEncoder
 
 DEFAULT_PREDICTIONS_PATH = Path("data/predictions/isolation_forest_v1_predictions.csv")
 
 RAW_PREDICTION_LABELS = {1: "Normal", -1: "Anomaly"}
+
+
+def check_encoder_compatibility(model) -> None:
+    """Refuse to score against a vocabulary the model wasn't trained on.
+
+    Categorical codes are only meaningful relative to the vocabulary that
+    produced them. Scoring a model against features encoded differently
+    returns confident nonsense rather than an error, which is exactly how the
+    dashboard came to report half of all blocks as anomalous.
+    """
+    trained_with = getattr(model, "encoder_fingerprint_", None)
+    if trained_with is None:
+        warnings.warn(
+            "Model has no encoder fingerprint — it predates stable category "
+            "encoding, so its predictions cannot be verified against the "
+            "current features. Retrain it to restore the guarantee.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+
+    current = CategoryEncoder.load().fingerprint()
+    if trained_with != current:
+        raise ValueError(
+            f"Category encoding mismatch: model was trained with vocabulary "
+            f"{trained_with} but the current features use {current}. The codes "
+            f"no longer refer to the same components/IPs, so any prediction "
+            f"would be meaningless. Rebuild features or retrain the model."
+        )
 
 
 def predict(
@@ -21,6 +52,8 @@ def predict(
     TRAINING_FEATURE_COLUMNS, i.e. the V1 baseline's full feature set; a GA
     candidate with a different selected feature subset can pass its own).
     """
+    check_encoder_compatibility(model)
+
     inference_matrix = merged[feature_columns]
     raw_predictions = model.predict(inference_matrix)
     anomaly_scores = -model.decision_function(inference_matrix)

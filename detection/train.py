@@ -4,6 +4,7 @@ import joblib
 import pandas as pd
 
 from detection.isolation_forest import TRAINING_FEATURE_COLUMNS, build_isolation_forest
+from feature_engineering.category_encoder import CategoryEncoder
 
 DEFAULT_FEATURES_PATH = Path("data/features/features.csv")
 DEFAULT_LABELS_PATH = Path("data/raw/hdfs/anomaly_label.csv")
@@ -36,6 +37,10 @@ def train_isolation_forest(
     model = build_isolation_forest()
     training_matrix = merged[TRAINING_FEATURE_COLUMNS]
     model.fit(training_matrix)
+
+    # Record which category vocabulary these codes came from, so inference can
+    # detect features encoded a different way instead of scoring nonsense.
+    model.encoder_fingerprint_ = CategoryEncoder.load().fingerprint()
 
     model_path = Path(model_path)
     model_path.parent.mkdir(parents=True, exist_ok=True)

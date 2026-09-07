@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from feature_engineering.category_encoder import DEFAULT_VOCAB_PATH, CategoryEncoder
+
 
 DEFAULT_FEATURE_OUTPUT_PATH = Path("data/features/features.csv")
 REQUIRED_CLEAN_COLUMNS = [
@@ -35,7 +37,11 @@ class HDFSFeatureExtractor:
         self,
         logs: pd.DataFrame | str | Path,
         output_path: str | Path = DEFAULT_FEATURE_OUTPUT_PATH,
+        vocab_path: str | Path = DEFAULT_VOCAB_PATH,
     ) -> pd.DataFrame:
+        # Codes come from a persisted vocabulary so they mean the same thing
+        # across builds; see feature_engineering/category_encoder.py.
+        encoder = CategoryEncoder.load(vocab_path)
         frame = self._load_frame(logs)
         self.validate_schema(frame)
 
@@ -55,11 +61,11 @@ class HDFSFeatureExtractor:
         event["is_error"] = (
             prepared["log_level"].astype("string").str.upper().eq("ERROR").astype("int64")
         )
-        event["component_encoded"] = self._encode_categories(prepared["component"])
-        event["event_type_encoded"] = self._encode_categories(prepared["event_type"])
+        event["component_encoded"] = encoder.encode("component", prepared["component"])
+        event["event_type_encoded"] = encoder.encode("event_type", prepared["event_type"])
         event["block_size"] = prepared["block_size"].astype("float64")
-        event["source_ip_encoded"] = self._encode_categories(prepared["source_ip"])
-        event["destination_ip_encoded"] = self._encode_categories(prepared["destination_ip"])
+        event["source_ip_encoded"] = encoder.encode("source_ip", prepared["source_ip"])
+        event["destination_ip_encoded"] = encoder.encode("destination_ip", prepared["destination_ip"])
 
         grouped = event.groupby("block_id", sort=False)
         aggregated = grouped.agg(
@@ -90,6 +96,9 @@ class HDFSFeatureExtractor:
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
         result.to_csv(output, index=False)
+
+        # Persist any values this build added, so the next one reuses them.
+        encoder.save(vocab_path)
         return features
 
     def validate_schema(self, frame: pd.DataFrame) -> None:
@@ -103,12 +112,6 @@ class HDFSFeatureExtractor:
         if isinstance(logs, pd.DataFrame):
             return logs
         return pd.read_csv(logs)
-
-    @staticmethod
-    def _encode_categories(series: pd.Series) -> pd.Series:
-        values = series.astype("string").fillna("UNKNOWN")
-        categories = {value: index for index, value in enumerate(sorted(values.unique()))}
-        return values.map(categories).astype("int64")
 
     @staticmethod
     def _dominant_value_per_group(frame: pd.DataFrame, group_col: str, value_col: str) -> pd.Series:

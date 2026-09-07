@@ -12,6 +12,7 @@ from flask import Blueprint, jsonify, request
 
 from auth import token_required
 
+from detection.isolation_forest import save_model
 from detection.evaluate import evaluate, print_metrics_table
 from detection.predict import predict
 from detection.train import DEFAULT_FEATURES_PATH, load_labeled_features
@@ -220,15 +221,17 @@ def dashboard():
         fp_rate = _clean_float(fp / (fp + tn)) if (fp + tn) else None
 
     events_per_day = stats.get("events_per_day", {})
-    anomalies_by_day = (
-        predictions.assign(day=predictions["first_seen"].dt.date.astype("string"))
-        .groupby("day")["predicted_label"]
-        .apply(lambda s: int((s == "Anomaly").sum()))
-    )
+    by_day = predictions.assign(day=predictions["first_seen"].dt.date.astype("string")).groupby("day")
+    anomalies_by_day = by_day["predicted_label"].apply(lambda s: int((s == "Anomaly").sum()))
+    # "logs" counts raw log lines while anomalies are counted per block, so the
+    # block total goes out too — without it the two series share an axis while
+    # having different denominators, and the chart reads as a false ratio.
+    blocks_by_day = by_day.size()
     volume_by_day = [
         {
             "day": day,
             "logs": int(count),
+            "blocks": int(blocks_by_day.get(day, 0)),
             "anomalies": int(anomalies_by_day.get(day, 0)),
         }
         for day, count in sorted(events_per_day.items())
@@ -568,7 +571,7 @@ def _run_retrain_job(job_id: str):
         model.fit(merged[selected_features])
 
         CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(model, CANDIDATE_MODEL_PATH)
+        save_model(model, CANDIDATE_MODEL_PATH)
 
         candidate_predictions = predict(
             model, merged, output_path=CANDIDATE_PREDICTIONS_PATH, feature_columns=selected_features

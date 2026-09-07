@@ -1,0 +1,27 @@
+{
+  "accuracy": 0.9691703188756234,
+  "precision": 0.8200934579439252,
+  "recall": 0.3961625282167043,
+  "f1": 0.5342465753424658,
+  "confusion_matrix": {
+    "labels": [
+      "Normal",
+      "Anomaly"
+    ],
+    "matrix": [
+      [
+        18888,
+        77
+      ],
+      [
+        535,
+        351
+      ]
+    ]
+  },
+  "support": {
+    "total": 19851,
+    "normal": 18965,
+    "anomaly": 886
+  }
+}
