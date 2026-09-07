@@ -14,7 +14,7 @@ from auth import token_required
 
 from detection.evaluate import evaluate, print_metrics_table
 from detection.predict import predict
-from detection.train import load_labeled_features
+from detection.train import DEFAULT_FEATURES_PATH, load_labeled_features
 from optimization.ga_isolation_forest import TRAINING_FEATURE_COLUMNS, build_model, run_ga, stratified_subsample
 from optimization.model_evolution import DEFAULT_CURRENT_VERSION_PATH, DEFAULT_VERSION_HISTORY_PATH, evaluate_and_promote
 
@@ -93,23 +93,42 @@ def _metrics_for(metrics_path: str) -> dict | None:
 _cache_lock = threading.Lock()
 _cache = {
     "version": None,
+    "data_key": None,  # mtimes of the files the predictions were built from
     "predictions": None,  # DataFrame: block_id, true_label, predicted_label, anomaly_score, severity
     "block_metadata": None,  # DataFrame
+    "block_metadata_mtime": None,
     "dataset_stats": None,
+    "dataset_stats_mtime": None,
 }
 
 
+def _mtime(path: Path):
+    """Modification time, or None when the file isn't there yet."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
 def _load_block_metadata() -> pd.DataFrame:
-    if _cache["block_metadata"] is None:
+    # Keyed on mtime: the pipeline scripts rewrite these files, and caching on
+    # first read alone served stale numbers until the server was restarted.
+    mtime = _mtime(BLOCK_METADATA_PATH)
+    if _cache["block_metadata"] is None or _cache["block_metadata_mtime"] != mtime:
         frame = pd.read_csv(BLOCK_METADATA_PATH)
         frame["first_seen"] = pd.to_datetime(frame["first_seen"])
         _cache["block_metadata"] = frame
+        _cache["block_metadata_mtime"] = mtime
     return _cache["block_metadata"]
 
 
 def _load_dataset_stats() -> dict:
-    if _cache["dataset_stats"] is None:
+    mtime = _mtime(DATASET_STATS_PATH)
+    if _cache["dataset_stats"] is None or _cache["dataset_stats_mtime"] != mtime:
+        # A missing file caches as {}, so without the mtime check the API kept
+        # reporting zero logs processed after the stats were generated.
         _cache["dataset_stats"] = _read_json(DATASET_STATS_PATH) or {}
+        _cache["dataset_stats_mtime"] = mtime
     return _cache["dataset_stats"]
 
 
@@ -145,9 +164,13 @@ def get_current_predictions() -> pd.DataFrame:
     """
     current = resolve_current_deployment()
     version = current.get("version")
+    # Rebuilding features.csv or block_metadata.csv changes the predictions
+    # even when the deployed version hasn't moved, so both count towards the
+    # cache key alongside the version.
+    data_key = (_mtime(DEFAULT_FEATURES_PATH), _mtime(BLOCK_METADATA_PATH))
 
     with _cache_lock:
-        if _cache["version"] == version and _cache["predictions"] is not None:
+        if _cache["version"] == version and _cache["data_key"] == data_key and _cache["predictions"] is not None:
             return _cache["predictions"]
 
         model = joblib.load(current["model_path"])
@@ -162,6 +185,7 @@ def get_current_predictions() -> pd.DataFrame:
         joined = predictions.merge(block_metadata, on="block_id", how="left")
 
         _cache["version"] = version
+        _cache["data_key"] = data_key
         _cache["predictions"] = joined
         return joined
 
