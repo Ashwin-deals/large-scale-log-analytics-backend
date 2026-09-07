@@ -10,6 +10,8 @@ import joblib
 import pandas as pd
 from flask import Blueprint, jsonify, request
 
+from auth import token_required
+
 from detection.evaluate import evaluate, print_metrics_table
 from detection.predict import predict
 from detection.train import load_labeled_features
@@ -163,6 +165,7 @@ def invalidate_prediction_cache():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/dashboard")
+@token_required
 def dashboard():
     stats = _load_dataset_stats()
     predictions = get_current_predictions()
@@ -270,6 +273,7 @@ def dashboard():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/detections/summary")
+@token_required
 def detections_summary():
     predictions = get_current_predictions()
     current = resolve_current_deployment()
@@ -292,6 +296,7 @@ def detections_summary():
 
 
 @pipeline_bp.get("/api/detections")
+@token_required
 def detections():
     predictions = get_current_predictions()
 
@@ -341,6 +346,7 @@ def detections():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/analytics")
+@token_required
 def analytics():
     stats = _load_dataset_stats()
     predictions = get_current_predictions()
@@ -439,6 +445,7 @@ def _timeline_from_history(history: list[dict]) -> list[dict]:
 
 
 @pipeline_bp.get("/api/models")
+@token_required
 def models():
     current = resolve_current_deployment()
     current_metrics = _metrics_for(current["metrics_path"])
@@ -555,6 +562,7 @@ def _run_retrain_job(job_id: str):
 
 
 @pipeline_bp.post("/api/models/retrain")
+@token_required
 def start_retrain():
     global _active_job_id
     with _jobs_lock:
@@ -571,6 +579,7 @@ def start_retrain():
 
 
 @pipeline_bp.get("/api/models/retrain/<job_id>")
+@token_required
 def retrain_status(job_id: str):
     with _jobs_lock:
         job = _jobs.get(job_id)
