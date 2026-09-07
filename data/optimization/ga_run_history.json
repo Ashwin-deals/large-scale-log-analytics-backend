@@ -1,0 +1,49 @@
+{
+  "gene_names": [
+    "feature__hour_of_day",
+    "feature__component_encoded",
+    "feature__event_type_encoded",
+    "feature__block_size",
+    "feature__event_frequency",
+    "feature__source_ip_encoded",
+    "feature__destination_ip_encoded",
+    "n_estimators",
+    "max_samples",
+    "max_features",
+    "contamination"
+  ],
+  "population_size": 16,
+  "num_generations": 12,
+  "generations_completed": 12,
+  "fitness_sample_size": 40000,
+  "wall_clock_seconds": 180.03655512500154,
+  "generation_seconds": [
+    13.845072457999777,
+    13.530668208999487,
+    13.656442250001419,
+    14.503480415998638,
+    14.930031042000337,
+    14.763818833000187,
+    14.887582584000484,
+    15.369123415999638,
+    15.712063791999753,
+    15.138920917001087,
+    13.728500499999427,
+    13.196485250000478
+  ],
+  "best_fitness_per_generation": [
+    0.5640711220110362,
+    0.5787193066923447,
+    0.5787193066923447,
+    0.5787193066923447,
+    0.6560232220609579,
+    0.6560232220609579,
+    0.6821631878557874,
+    0.6821631878557874,
+    0.6821631878557874,
+    0.6821631878557874,
+    0.6821631878557874,
+    0.6821631878557874
+  ],
+  "best_fitness_on_fitness_subsample": 0.6821631878557874
+}
