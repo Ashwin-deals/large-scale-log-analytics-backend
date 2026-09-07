@@ -10,9 +10,11 @@ import joblib
 import pandas as pd
 from flask import Blueprint, jsonify, request
 
+from auth import token_required
+
 from detection.evaluate import evaluate, print_metrics_table
 from detection.predict import predict
-from detection.train import load_labeled_features
+from detection.train import DEFAULT_FEATURES_PATH, load_labeled_features
 from optimization.ga_isolation_forest import TRAINING_FEATURE_COLUMNS, build_model, run_ga, stratified_subsample
 from optimization.model_evolution import DEFAULT_CURRENT_VERSION_PATH, DEFAULT_VERSION_HISTORY_PATH, evaluate_and_promote
 
@@ -44,6 +46,18 @@ def _read_json(path: Path):
         return None
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _int_arg(name, default):
+    """Read an int query param, falling back to the default when it isn't one.
+
+    int() on a malformed value raises, which the error handler turns into a
+    500; a bad page number should just fall back rather than break the page.
+    """
+    try:
+        return int(request.args.get(name, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _clean_float(value):
@@ -79,23 +93,42 @@ def _metrics_for(metrics_path: str) -> dict | None:
 _cache_lock = threading.Lock()
 _cache = {
     "version": None,
+    "data_key": None,  # mtimes of the files the predictions were built from
     "predictions": None,  # DataFrame: block_id, true_label, predicted_label, anomaly_score, severity
     "block_metadata": None,  # DataFrame
+    "block_metadata_mtime": None,
     "dataset_stats": None,
+    "dataset_stats_mtime": None,
 }
 
 
+def _mtime(path: Path):
+    """Modification time, or None when the file isn't there yet."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
 def _load_block_metadata() -> pd.DataFrame:
-    if _cache["block_metadata"] is None:
+    # Keyed on mtime: the pipeline scripts rewrite these files, and caching on
+    # first read alone served stale numbers until the server was restarted.
+    mtime = _mtime(BLOCK_METADATA_PATH)
+    if _cache["block_metadata"] is None or _cache["block_metadata_mtime"] != mtime:
         frame = pd.read_csv(BLOCK_METADATA_PATH)
         frame["first_seen"] = pd.to_datetime(frame["first_seen"])
         _cache["block_metadata"] = frame
+        _cache["block_metadata_mtime"] = mtime
     return _cache["block_metadata"]
 
 
 def _load_dataset_stats() -> dict:
-    if _cache["dataset_stats"] is None:
+    mtime = _mtime(DATASET_STATS_PATH)
+    if _cache["dataset_stats"] is None or _cache["dataset_stats_mtime"] != mtime:
+        # A missing file caches as {}, so without the mtime check the API kept
+        # reporting zero logs processed after the stats were generated.
         _cache["dataset_stats"] = _read_json(DATASET_STATS_PATH) or {}
+        _cache["dataset_stats_mtime"] = mtime
     return _cache["dataset_stats"]
 
 
@@ -131,9 +164,13 @@ def get_current_predictions() -> pd.DataFrame:
     """
     current = resolve_current_deployment()
     version = current.get("version")
+    # Rebuilding features.csv or block_metadata.csv changes the predictions
+    # even when the deployed version hasn't moved, so both count towards the
+    # cache key alongside the version.
+    data_key = (_mtime(DEFAULT_FEATURES_PATH), _mtime(BLOCK_METADATA_PATH))
 
     with _cache_lock:
-        if _cache["version"] == version and _cache["predictions"] is not None:
+        if _cache["version"] == version and _cache["data_key"] == data_key and _cache["predictions"] is not None:
             return _cache["predictions"]
 
         model = joblib.load(current["model_path"])
@@ -148,6 +185,7 @@ def get_current_predictions() -> pd.DataFrame:
         joined = predictions.merge(block_metadata, on="block_id", how="left")
 
         _cache["version"] = version
+        _cache["data_key"] = data_key
         _cache["predictions"] = joined
         return joined
 
@@ -163,6 +201,7 @@ def invalidate_prediction_cache():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/dashboard")
+@token_required
 def dashboard():
     stats = _load_dataset_stats()
     predictions = get_current_predictions()
@@ -270,6 +309,7 @@ def dashboard():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/detections/summary")
+@token_required
 def detections_summary():
     predictions = get_current_predictions()
     current = resolve_current_deployment()
@@ -292,13 +332,14 @@ def detections_summary():
 
 
 @pipeline_bp.get("/api/detections")
+@token_required
 def detections():
     predictions = get_current_predictions()
 
     search = (request.args.get("search") or "").strip().lower()
     severity = (request.args.get("severity") or "all").strip().lower()
-    page = max(1, int(request.args.get("page", 1)))
-    limit = min(200, max(1, int(request.args.get("limit", 25))))
+    page = max(1, _int_arg("page", 1))
+    limit = min(200, max(1, _int_arg("limit", 25)))
 
     filtered = predictions
     if severity != "all":
@@ -341,6 +382,7 @@ def detections():
 # ---------------------------------------------------------------------------
 
 @pipeline_bp.get("/api/analytics")
+@token_required
 def analytics():
     stats = _load_dataset_stats()
     predictions = get_current_predictions()
@@ -439,6 +481,7 @@ def _timeline_from_history(history: list[dict]) -> list[dict]:
 
 
 @pipeline_bp.get("/api/models")
+@token_required
 def models():
     current = resolve_current_deployment()
     current_metrics = _metrics_for(current["metrics_path"])
@@ -555,6 +598,7 @@ def _run_retrain_job(job_id: str):
 
 
 @pipeline_bp.post("/api/models/retrain")
+@token_required
 def start_retrain():
     global _active_job_id
     with _jobs_lock:
@@ -571,6 +615,7 @@ def start_retrain():
 
 
 @pipeline_bp.get("/api/models/retrain/<job_id>")
+@token_required
 def retrain_status(job_id: str):
     with _jobs_lock:
         job = _jobs.get(job_id)

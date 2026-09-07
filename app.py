@@ -3,21 +3,19 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-import certifi
 import jwt
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from werkzeug.exceptions import HTTPException
 
+from db import user_details
 from pipeline_api import pipeline_bp
+from sources_api import MAX_UPLOAD_BYTES, sources_bp
 
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-MONGO_DB = os.getenv("MONGO_DB", "users")
-MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "user_details")
 JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret")
 CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:3000")
 JWT_TTL_HOURS = 24
@@ -25,14 +23,13 @@ JWT_TTL_HOURS = 24
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 app = Flask(__name__)
-CORS(app, origins=[CORS_ORIGIN])
+# allow_headers must include Authorization, or the browser's preflight blocks
+# the bearer token the dashboard sends on every pipeline request.
+CORS(app, origins=[CORS_ORIGIN], allow_headers=["Content-Type", "Authorization"])
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 app.register_blueprint(pipeline_bp)
+app.register_blueprint(sources_bp)
 
-# tlsCAFile pins certifi's bundle so Atlas connections work on machines whose
-# Python has no system root certificates installed (common on macOS).
-client = MongoClient(MONGO_URI, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=15000)
-db = client[MONGO_DB]
-user_details = db[MONGO_COLLECTION]
 user_details.create_index("email", unique=True)
 
 
@@ -98,5 +95,24 @@ def health():
     return jsonify({"status": "ok"})
 
 
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    """Return unhandled errors as JSON.
+
+    Werkzeug's HTML debug page is returned before Flask-CORS can attach its
+    headers, so a browser sees a CORS failure ("Failed to fetch") instead of
+    the real error. Answering with JSON keeps the CORS headers on the response
+    and lets the dashboard show what actually went wrong.
+    """
+    if isinstance(exc, HTTPException):
+        return jsonify({"error": exc.description}), exc.code
+
+    app.logger.exception("Unhandled error on %s", request.path)
+    return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+
+
 if __name__ == "__main__":
-    app.run(port=5000, debug=True, threaded=True)
+    # Debug defaults off: the Werkzeug debugger exposes an interactive console
+    # and full tracebacks. Opt in with FLASK_DEBUG=1 when you need it.
+    debug = os.getenv("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+    app.run(port=5000, debug=debug, threaded=True)
