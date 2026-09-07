@@ -48,6 +48,18 @@ def _read_json(path: Path):
         return json.load(f)
 
 
+def _int_arg(name, default):
+    """Read an int query param, falling back to the default when it isn't one.
+
+    int() on a malformed value raises, which the error handler turns into a
+    500; a bad page number should just fall back rather than break the page.
+    """
+    try:
+        return int(request.args.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _clean_float(value):
     if value is None:
         return None
@@ -302,8 +314,8 @@ def detections():
 
     search = (request.args.get("search") or "").strip().lower()
     severity = (request.args.get("severity") or "all").strip().lower()
-    page = max(1, int(request.args.get("page", 1)))
-    limit = min(200, max(1, int(request.args.get("limit", 25))))
+    page = max(1, _int_arg("page", 1))
+    limit = min(200, max(1, _int_arg("limit", 25)))
 
     filtered = predictions
     if severity != "all":
