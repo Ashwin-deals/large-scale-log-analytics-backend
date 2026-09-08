@@ -1,0 +1,45 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run test suite
+        run: python -m unittest discover tests
+
+      - name: Import sanity check
+        # tests/ only covers feature_engineering, parser, and
+        # optimization.model_evolution (see what each test file imports).
+        # The Flask app modules below have no unit tests, so this at least
+        # catches import-time breakage (syntax errors, missing imports,
+        # circular imports) in the code that actually backs the API.
+        # app.py itself is excluded: it calls create_index() at import
+        # time, which needs a real, reachable MongoDB (see CLAUDE.md).
+        run: |
+          python -c "
+          import importlib
+          modules = [
+              'auth', 'db', 'pipeline_api', 'sources_api',
+              'detection.predict', 'detection.train', 'detection.evaluate', 'detection.isolation_forest',
+              'optimization.ga_isolation_forest', 'optimization.model_evolution',
+          ]
+          for name in modules:
+              importlib.import_module(name)
+          print(f'Imported {len(modules)} modules OK')
+          "
