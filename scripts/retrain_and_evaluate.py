@@ -27,6 +27,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR))
 
 from detection.evaluate import evaluate, print_metrics_table
+from detection.isolation_forest import save_model
 from detection.predict import predict
 from detection.train import load_labeled_features
 from optimization.ga_isolation_forest import TRAINING_FEATURE_COLUMNS, build_model, run_ga, stratified_subsample
@@ -114,7 +115,7 @@ def train_candidate(train_data, eval_data) -> dict:
     model.fit(train_data[selected_features])
 
     CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, CANDIDATE_MODEL_PATH)
+    save_model(model, CANDIDATE_MODEL_PATH)
 
     predictions = predict(
         model,

@@ -12,6 +12,7 @@ from flask import Blueprint, jsonify, request
 
 from auth import token_required
 
+from detection.isolation_forest import save_model
 from detection.evaluate import evaluate, print_metrics_table
 from detection.predict import predict
 from detection.train import DEFAULT_FEATURES_PATH, load_labeled_features
@@ -132,6 +133,33 @@ def _load_dataset_stats() -> dict:
     return _cache["dataset_stats"]
 
 
+HEALTHY_MIN_F1 = 0.40
+
+
+def _model_status(current: dict, metrics: dict) -> dict:
+    """Describe the deployed model's health from what is actually on disk.
+
+    The dashboard used to render "Active / Healthy" as a literal, so it read
+    the same whether the model was sound or scoring near zero.
+    """
+    model_path = Path(current.get("model_path", ""))
+    if not model_path.exists():
+        return {"state": "unavailable", "tone": "danger",
+                "detail": f"Model file missing: {model_path}"}
+
+    f1 = metrics.get("f1")
+    if f1 is None:
+        return {"state": "unverified", "tone": "warning",
+                "detail": "No evaluation metrics recorded for the deployed model."}
+
+    if f1 < HEALTHY_MIN_F1:
+        return {"state": "degraded", "tone": "danger",
+                "detail": f"F1 {f1:.4f} is below the {HEALTHY_MIN_F1:.2f} threshold."}
+
+    return {"state": "healthy", "tone": "success",
+            "detail": f"F1 {f1:.4f} on {metrics.get('support', {}).get('total', 0):,} blocks."}
+
+
 def _compute_severity(scores: pd.Series, is_anomaly: pd.Series) -> pd.Series:
     """
     Buckets anomaly_score into critical/high/medium by tertile, computed
@@ -220,15 +248,17 @@ def dashboard():
         fp_rate = _clean_float(fp / (fp + tn)) if (fp + tn) else None
 
     events_per_day = stats.get("events_per_day", {})
-    anomalies_by_day = (
-        predictions.assign(day=predictions["first_seen"].dt.date.astype("string"))
-        .groupby("day")["predicted_label"]
-        .apply(lambda s: int((s == "Anomaly").sum()))
-    )
+    by_day = predictions.assign(day=predictions["first_seen"].dt.date.astype("string")).groupby("day")
+    anomalies_by_day = by_day["predicted_label"].apply(lambda s: int((s == "Anomaly").sum()))
+    # "logs" counts raw log lines while anomalies are counted per block, so the
+    # block total goes out too — without it the two series share an axis while
+    # having different denominators, and the chart reads as a false ratio.
+    blocks_by_day = by_day.size()
     volume_by_day = [
         {
             "day": day,
             "logs": int(count),
+            "blocks": int(blocks_by_day.get(day, 0)),
             "anomalies": int(anomalies_by_day.get(day, 0)),
         }
         for day, count in sorted(events_per_day.items())
@@ -270,19 +300,28 @@ def dashboard():
         for row in recent_anomalies.itertuples()
     ]
     for entry in history[-5:]:
-        activity.append(
-            {
-                "type": "promotion" if entry["promoted"] else "rejection",
-                "text": (
-                    f"Candidate **promoted** to V{entry['new_version']} ({entry['metric']}: "
-                    f"{entry['candidate_metric_value']:.4f})"
-                    if entry["promoted"]
-                    else f"Candidate rejected — {entry['metric']} {entry['candidate_metric_value']:.4f} "
-                    f"did not beat current {entry['current_metric_value']:.4f}"
-                ),
-                "timestamp": entry["timestamp"],
-            }
-        )
+        # Refit entries record no candidate, so they carry no candidate metric.
+        if entry.get("event") == "refit":
+            changed = ", ".join(
+                f"V{v['version']} {v['before']:.4f}->{v['after']:.4f}"
+                for v in entry.get("versions", [])
+            )
+            text = f"Models **refitted** on rebuilt features ({entry['metric']}: {changed})"
+            kind = "refit"
+        elif entry["promoted"]:
+            text = (
+                f"Candidate **promoted** to V{entry['new_version']} ({entry['metric']}: "
+                f"{entry['candidate_metric_value']:.4f})"
+            )
+            kind = "promotion"
+        else:
+            text = (
+                f"Candidate rejected — {entry['metric']} {entry['candidate_metric_value']:.4f} "
+                f"did not beat current {entry['current_metric_value']:.4f}"
+            )
+            kind = "rejection"
+
+        activity.append({"type": kind, "text": text, "timestamp": entry["timestamp"]})
     activity.sort(key=lambda a: a["timestamp"], reverse=True)
 
     return jsonify(
@@ -294,6 +333,7 @@ def dashboard():
                 "anomaly_rate_pct": _clean_float((anomalous / total_blocks * 100) if total_blocks else 0),
                 "current_version": current["version"],
                 "false_positive_rate_pct": _clean_float(fp_rate * 100) if fp_rate is not None else None,
+                "model_status": _model_status(current, current_metrics),
             },
             "volume_by_day": volume_by_day,
             "severity_mix": severity_mix,
@@ -453,7 +493,23 @@ def analytics():
 def _timeline_from_history(history: list[dict]) -> list[dict]:
     timeline = []
     for entry in reversed(history):
-        if entry["promoted"]:
+        # A refit re-fits the existing versions on rebuilt features; it isn't a
+        # promotion, and without its own entry the scores recorded by earlier
+        # events silently stop matching the metrics shown beside them.
+        if entry.get("event") == "refit":
+            changes = ", ".join(
+                f"V{v['version']} {entry['metric']} {v['before']:.4f} -> {v['after']:.4f}"
+                for v in entry.get("versions", [])
+            )
+            timeline.append(
+                {
+                    "tone": "primary",
+                    "title": "Models refitted on rebuilt features",
+                    "meta": entry["timestamp"],
+                    "desc": changes or "Refitted against the current feature encoding.",
+                }
+            )
+        elif entry["promoted"]:
             timeline.append(
                 {
                     "tone": "success",
@@ -552,7 +608,17 @@ def _run_retrain_job(job_id: str):
 
         merged = load_labeled_features()
         fitness_sample_size = min(FITNESS_SAMPLE_SIZE, len(merged))
-        fitness_data = stratified_subsample(merged, fitness_sample_size)
+
+        # A fresh seed per run. Pinned to the module default, the GA and the
+        # model are fully deterministic, so every retrain over unchanged data
+        # reproduced a bit-identical candidate scoring exactly the incumbent's
+        # F1 — and promotion requires strictly beating it, so nothing could
+        # ever be promoted. Varying the seed lets each run explore differently.
+        run_seed = uuid.uuid4().int % (2**31 - 1)
+        with _jobs_lock:
+            _jobs[job_id]["random_seed"] = run_seed
+
+        fitness_data = stratified_subsample(merged, fitness_sample_size, random_state=run_seed)
 
         _, result = run_ga(
             X=fitness_data[TRAINING_FEATURE_COLUMNS],
@@ -560,15 +626,16 @@ def _run_retrain_job(job_id: str):
             population_size=POPULATION_SIZE,
             num_generations=NUM_GENERATIONS,
             num_parents_mating=NUM_PARENTS_MATING,
+            random_seed=run_seed,
         )
 
         best = result.best_chromosome
         selected_features = best.selected_features
-        model = build_model(best)
+        model = build_model(best, random_state=run_seed)
         model.fit(merged[selected_features])
 
         CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(model, CANDIDATE_MODEL_PATH)
+        save_model(model, CANDIDATE_MODEL_PATH)
 
         candidate_predictions = predict(
             model, merged, output_path=CANDIDATE_PREDICTIONS_PATH, feature_columns=selected_features

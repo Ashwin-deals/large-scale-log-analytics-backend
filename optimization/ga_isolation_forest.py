@@ -159,7 +159,15 @@ def decode_chromosome(genes) -> Chromosome:
     )
 
 
-def build_model(chromosome: Chromosome) -> IsolationForest:
+def build_model(chromosome: Chromosome, random_state: int = RANDOM_STATE) -> IsolationForest:
+    """Build an Isolation Forest for this chromosome.
+
+    random_state is a parameter rather than a constant so a retrain can explore
+    a different corner of the search space. Pinned to RANDOM_STATE it reproduces
+    the same model from the same data every time, which is what made every
+    retrain return a bit-identical candidate that could never beat the current
+    model (see the repeated "0.6788 did not beat 0.6788" history entries).
+    """
     return IsolationForest(
         n_estimators=chromosome.n_estimators,
         max_samples=chromosome.max_samples,
@@ -167,7 +175,7 @@ def build_model(chromosome: Chromosome) -> IsolationForest:
         contamination=chromosome.contamination,
         bootstrap=chromosome.bootstrap,
         n_jobs=-1,
-        random_state=RANDOM_STATE,
+        random_state=random_state,
     )
 
 
@@ -176,6 +184,7 @@ def _fit_and_score(
     X_train: pd.DataFrame,
     X_eval: pd.DataFrame,
     y_eval: pd.Series,
+    random_state: int = RANDOM_STATE,
 ) -> float:
     """
     Fits on X_train, scores with F1(Anomaly) on X_eval/y_eval. X_train and
@@ -190,14 +199,14 @@ def _fit_and_score(
     exactly what gets reported and compared.
     """
     selected = chromosome.selected_features
-    model = build_model(chromosome)
+    model = build_model(chromosome, random_state=random_state)
     model.fit(X_train[selected])
     raw_predictions = model.predict(X_eval[selected])
     predicted_label = np.where(raw_predictions == -1, "Anomaly", "Normal")
     return float(f1_score(y_eval, predicted_label, pos_label=POSITIVE_LABEL, zero_division=0))
 
 
-def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series) -> float:
+def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_STATE) -> float:
     """
     Original single fit+score: trains on X, scores (in-sample) on the same
     X/y. Still what the live retrain endpoint and the repeatable adaptation
@@ -206,7 +215,7 @@ def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series) -> f
     """
     if sum(chromosome.feature_mask) == 0:
         return 0.0
-    return _fit_and_score(chromosome, X, X, y)
+    return _fit_and_score(chromosome, X, X, y, random_state=random_state)
 
 
 @dataclass
@@ -237,7 +246,7 @@ def k_fold_score_chromosome(
 
     splitter = StratifiedKFold(n_splits=k, shuffle=True, random_state=random_state)
     fold_scores = [
-        _fit_and_score(chromosome, X.iloc[train_idx], X.iloc[test_idx], y.iloc[test_idx])
+        _fit_and_score(chromosome, X.iloc[train_idx], X.iloc[test_idx], y.iloc[test_idx], random_state=random_state)
         for train_idx, test_idx in splitter.split(X, y)
     ]
     return FoldScore(
@@ -319,7 +328,7 @@ def make_fitness_func(
             return cached.mean
 
         if k_folds <= 1:
-            fitness = score_chromosome(chromosome, X, y)
+            fitness = score_chromosome(chromosome, X, y, random_state=random_state)
             score = FoldScore(mean=fitness, std=0.0, fold_scores=[fitness])
         else:
             score = k_fold_score_chromosome(chromosome, X, y, k=k_folds, random_state=random_state)
