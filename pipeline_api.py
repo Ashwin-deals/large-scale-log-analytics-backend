@@ -133,6 +133,59 @@ def _load_dataset_stats() -> dict:
     return _cache["dataset_stats"]
 
 
+# ---------------------------------------------------------------------------
+# Uploaded blocks folded into the dashboard totals
+# ---------------------------------------------------------------------------
+
+UPLOAD_BLOCKS_DIR = Path("data/uploads/results")
+UPLOAD_BLOCKS_GLOB = "*_blocks.csv"
+UPLOAD_BLOCK_COLUMNS = [
+    "block_id", "first_seen", "block_size", "component", "event_type",
+    "source_ip", "destination_ip", "event_frequency", "predicted_label", "anomaly_score",
+]
+
+
+def _upload_blocks_key() -> tuple:
+    """Cache key covering every processed upload's block record file, so a new
+    upload shows up in the dashboard on the next request instead of waiting
+    for a model promotion or a server restart."""
+    try:
+        paths = sorted(UPLOAD_BLOCKS_DIR.glob(UPLOAD_BLOCKS_GLOB))
+    except OSError:
+        return ()
+    return tuple((str(path), _mtime(path)) for path in paths)
+
+
+def _load_upload_blocks() -> pd.DataFrame:
+    """Every uploaded block scored so far, one row per distinct block_id.
+
+    Deduplicated across uploads: a block_id identifies one real HDFS block, so
+    re-uploading a log that covers it must not make the cluster look bigger
+    than it is. First occurrence wins; the model is deterministic, so a repeat
+    scores identically anyway.
+    """
+    frames = []
+    for path in sorted(UPLOAD_BLOCKS_DIR.glob(UPLOAD_BLOCKS_GLOB)):
+        try:
+            frames.append(pd.read_csv(path))
+        except (OSError, pd.errors.ParserError, pd.errors.EmptyDataError):
+            # A half-written or corrupt upload record must not take the whole
+            # dashboard down; skip it and keep serving the rest.
+            continue
+
+    if not frames:
+        return pd.DataFrame(columns=UPLOAD_BLOCK_COLUMNS)
+
+    blocks = pd.concat(frames, ignore_index=True)
+    missing = [column for column in UPLOAD_BLOCK_COLUMNS if column not in blocks.columns]
+    if missing:
+        return pd.DataFrame(columns=UPLOAD_BLOCK_COLUMNS)
+
+    blocks = blocks[UPLOAD_BLOCK_COLUMNS].drop_duplicates(subset=["block_id"], keep="first")
+    blocks["first_seen"] = pd.to_datetime(blocks["first_seen"], errors="coerce")
+    return blocks.reset_index(drop=True)
+
+
 HEALTHY_MIN_F1 = 0.40
 
 
@@ -194,8 +247,8 @@ def get_current_predictions() -> pd.DataFrame:
     version = current.get("version")
     # Rebuilding features.csv or block_metadata.csv changes the predictions
     # even when the deployed version hasn't moved, so both count towards the
-    # cache key alongside the version.
-    data_key = (_mtime(DEFAULT_FEATURES_PATH), _mtime(BLOCK_METADATA_PATH))
+    # cache key alongside the version — as does any newly processed upload.
+    data_key = (_mtime(DEFAULT_FEATURES_PATH), _mtime(BLOCK_METADATA_PATH), _upload_blocks_key())
 
     with _cache_lock:
         if _cache["version"] == version and _cache["data_key"] == data_key and _cache["predictions"] is not None:
@@ -206,11 +259,26 @@ def get_current_predictions() -> pd.DataFrame:
         feature_columns = list(model.feature_names_in_)
         predictions = predict(model, merged, output_path=CANDIDATE_PREDICTIONS_PATH.parent / "_live_predictions.csv", feature_columns=feature_columns)
 
-        is_anomaly = predictions["predicted_label"] == "Anomaly"
-        predictions["severity"] = _compute_severity(predictions["anomaly_score"], is_anomaly)
-
         block_metadata = _load_block_metadata()
         joined = predictions.merge(block_metadata, on="block_id", how="left")
+        joined["source"] = "dataset"
+        joined["event_frequency"] = pd.NA
+
+        # Uploaded blocks the base dataset has never seen extend the totals;
+        # ones it already contains are dropped rather than counted twice (the
+        # same block scored by the same model gives the same answer either way).
+        uploaded = _load_upload_blocks()
+        if len(uploaded):
+            new_blocks = uploaded[~uploaded["block_id"].isin(set(joined["block_id"]))].copy()
+            if len(new_blocks):
+                new_blocks["true_label"] = pd.NA  # uploads are unlabeled
+                new_blocks["source"] = "upload"
+                joined = pd.concat([joined, new_blocks[joined.columns]], ignore_index=True)
+
+        # Severity is bucketed after the union so an uploaded anomaly is ranked
+        # on the same scale as a base-dataset one.
+        is_anomaly = joined["predicted_label"] == "Anomaly"
+        joined["severity"] = _compute_severity(joined["anomaly_score"], is_anomaly)
 
         _cache["version"] = version
         _cache["data_key"] = data_key
@@ -236,7 +304,14 @@ def dashboard():
     current = resolve_current_deployment()
     current_metrics = _metrics_for(current["metrics_path"]) or {}
 
-    total_events = stats.get("total_events", 0)
+    # Uploads contribute their own raw log lines on top of the base dataset's,
+    # counted per block via event_frequency (dataset rows carry no count — the
+    # stats file already totals those).
+    from_uploads = predictions["source"] == "upload"
+    uploaded_events = int(pd.to_numeric(predictions.loc[from_uploads, "event_frequency"], errors="coerce").fillna(0).sum())
+    uploaded_blocks = int(from_uploads.sum())
+
+    total_events = stats.get("total_events", 0) + uploaded_events
     total_blocks = len(predictions)
     anomalous = int((predictions["predicted_label"] == "Anomaly").sum())
 
@@ -247,7 +322,22 @@ def dashboard():
         tn, fp = matrix[0][0], matrix[0][1]
         fp_rate = _clean_float(fp / (fp + tn)) if (fp + tn) else None
 
-    events_per_day = stats.get("events_per_day", {})
+    events_per_day = dict(stats.get("events_per_day", {}))
+    if uploaded_blocks:
+        # Uploaded lines land on the days their blocks were first seen, so a
+        # day the base dataset never covered still shows up on the chart.
+        upload_lines_by_day = (
+            predictions.loc[from_uploads]
+            .assign(
+                day=predictions.loc[from_uploads, "first_seen"].dt.date.astype("string"),
+                lines=pd.to_numeric(predictions.loc[from_uploads, "event_frequency"], errors="coerce").fillna(0),
+            )
+            .groupby("day")["lines"]
+            .sum()
+        )
+        for day, lines in upload_lines_by_day.items():
+            events_per_day[day] = events_per_day.get(day, 0) + int(lines)
+
     by_day = predictions.assign(day=predictions["first_seen"].dt.date.astype("string")).groupby("day")
     anomalies_by_day = by_day["predicted_label"].apply(lambda s: int((s == "Anomaly").sum()))
     # "logs" counts raw log lines while anomalies are counted per block, so the
@@ -334,6 +424,11 @@ def dashboard():
                 "current_version": current["version"],
                 "false_positive_rate_pct": _clean_float(fp_rate * 100) if fp_rate is not None else None,
                 "model_status": _model_status(current, current_metrics),
+                # What uploads added on top of the base dataset. Reported so a
+                # dashboard that hasn't moved after an upload can say why —
+                # every block in that file was already in the dataset.
+                "uploaded_blocks_added": uploaded_blocks,
+                "uploaded_logs_added": uploaded_events,
             },
             "volume_by_day": volume_by_day,
             "severity_mix": severity_mix,
@@ -409,7 +504,10 @@ def detections():
             "anomaly_score": _clean_float(row.anomaly_score),
             "severity": row.severity,
             "predicted_label": row.predicted_label,
-            "true_label": row.true_label,
+            # Uploaded blocks are unlabeled, so this is null for them rather
+            # than a NaN that would serialize as invalid JSON.
+            "true_label": row.true_label if pd.notna(row.true_label) else None,
+            "source": row.source,
         }
         for row in page_rows.itertuples()
     ]

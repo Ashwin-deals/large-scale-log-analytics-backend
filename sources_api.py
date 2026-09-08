@@ -71,14 +71,55 @@ def _serialize(doc):
     }
 
 
+def _upload_block_records(cleaned: pd.DataFrame, features: pd.DataFrame, predictions: pd.DataFrame) -> pd.DataFrame:
+    """Per-block records for this upload, in the same shape the dashboard's
+    block_metadata.csv provides for the base dataset.
+
+    The dashboard needs a timestamp, component, event_type and IPs per block
+    to fold an upload into its totals; the predictions CSV alone only carries
+    block_id/label/score. Aggregation matches scripts/build_block_metadata.py
+    (dominant value per block) so an uploaded block is described the same way
+    a base-dataset block is.
+    """
+    frame = cleaned.copy()
+    frame["datetime"] = pd.to_datetime(frame["datetime"], errors="coerce")
+    frame["block_size"] = pd.to_numeric(frame["block_size"], errors="coerce").fillna(0)
+    frame = frame.dropna(subset=["datetime"]).sort_values("datetime").reset_index(drop=True)
+
+    for column in ["component", "event_type", "source_ip", "destination_ip", "block_id"]:
+        frame[column] = frame[column].astype("string").str.strip().fillna("UNKNOWN")
+        frame[column] = frame[column].replace({"": "UNKNOWN", "<NA>": "UNKNOWN"})
+
+    aggregated = frame.groupby("block_id", sort=False).agg(
+        first_seen=("datetime", "first"),
+        block_size=("block_size", "max"),
+    ).reset_index()
+
+    for column in ["component", "event_type", "source_ip", "destination_ip"]:
+        dominant = HDFSFeatureExtractor._dominant_value_per_group(frame, "block_id", column)
+        aggregated[column] = aggregated["block_id"].map(dominant)
+
+    # event_frequency is this block's raw log-line count, which is what the
+    # dashboard's "Total Logs Processed" counts (log lines, not blocks).
+    aggregated = aggregated.merge(features[["block_id", "event_frequency"]], on="block_id", how="left")
+    aggregated["event_frequency"] = aggregated["event_frequency"].fillna(0).astype("int64")
+
+    return aggregated.merge(
+        predictions[["block_id", "predicted_label", "anomaly_score"]], on="block_id", how="inner"
+    )
+
+
 def _score_upload(recognized_frame: pd.DataFrame, upload_id) -> dict:
     """Runs a freshly uploaded (and already-recognized) HDFS log through the
     same clean -> extract-features -> predict stages as the base dataset,
     scored against whichever model is currently deployed.
 
     Per-block predictions are written to UPLOAD_RESULTS_DIR/<upload_id>.csv
-    for /api/sources/uploads/<id>/detections to read back; this function
-    returns just the summary that lands on the upload's Mongo doc.
+    for /api/sources/uploads/<id>/detections to read back, and the richer
+    per-block record (adding timestamp/component/event_type/IPs/line count)
+    to <upload_id>_blocks.csv, which is what pipeline_api.py folds into the
+    dashboard totals. This function returns just the summary that lands on
+    the upload's Mongo doc.
 
     HDFSFeatureExtractor.extract()'s *return value* drops block_id (only the
     CSV it writes keeps it — see feature_extractor.py), so read the CSV back
@@ -102,6 +143,12 @@ def _score_upload(recognized_frame: pd.DataFrame, upload_id) -> dict:
 
     results_path = UPLOAD_RESULTS_DIR / f"{upload_id}.csv"
     predictions = predict(model, features, output_path=results_path, feature_columns=feature_columns)
+
+    # Written last: pipeline_api.py treats the presence of this file as "this
+    # upload is ready to count", so it must not appear before the predictions
+    # it describes are on disk.
+    records = _upload_block_records(cleaned, features, predictions)
+    records.to_csv(UPLOAD_RESULTS_DIR / f"{upload_id}_blocks.csv", index=False)
 
     total = len(predictions)
     anomalies = int((predictions["predicted_label"] == "Anomaly").sum())
