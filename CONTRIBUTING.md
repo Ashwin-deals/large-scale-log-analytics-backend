@@ -1,6 +1,6 @@
 # Contributing to MorphGuard
 
-Thank you for your interest in contributing to MorphGuard! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing to MorphGuard! This document provides guidelines for contributing.
 
 ---
 
@@ -19,7 +19,7 @@ Thank you for your interest in contributing to MorphGuard! This document provide
 
 ## Code of Conduct
 
-This project adheres to a Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the project maintainers.
+This project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
 ---
 
@@ -46,25 +46,27 @@ This project adheres to a Code of Conduct. By participating, you are expected to
 
 ### Types of Contributions
 
-We welcome the following types of contributions:
-
 - **Bug Fixes**: Fix issues in existing code
-- **New Features**: Add new functionality to the system
+- **New Features**: Add new functionality
 - **Documentation**: Improve or add documentation
 - **Tests**: Add or improve test coverage
 - **Performance**: Optimize existing code
 - **New Parsers**: Add support for new log formats
 - **New Detection Algorithms**: Implement alternative anomaly detection methods
 
-### Areas Looking for Help
+### Priority Areas
 
-- Additional log format parsers (Apache, Nginx, Kubernetes, etc.)
-- Autoencoder-based anomaly detection implementation
-- Real-time streaming pipeline (Kafka integration)
-- API endpoint test coverage
-- CI/CD pipeline configuration
-- Docker containerization
-- Cloud connector implementations (AWS CloudWatch, Azure Monitor, etc.)
+The following areas are actively seeking contributions:
+
+| Area                        | Priority | Difficulty |
+|-----------------------------|----------|------------|
+| Additional log parsers      | High     | Medium     |
+| Autoencoder detection       | High     | Hard       |
+| Kafka streaming pipeline    | High     | Hard       |
+| API endpoint tests          | Medium   | Easy       |
+| CI/CD pipeline              | Medium   | Medium     |
+| Docker containerization     | Medium   | Easy       |
+| Cloud connectors            | Low      | Medium     |
 
 ---
 
@@ -72,25 +74,17 @@ We welcome the following types of contributions:
 
 ### Prerequisites
 
-- Python 3.10 or higher
-- MongoDB 6.0+ (local or Atlas)
+- Python 3.10+
+- MongoDB 6.0+ (or Atlas)
 - Git
 
-### Environment Setup
+### Quick Setup
 
 ```bash
-# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Copy environment configuration
 cp .env.example .env
-# Edit .env with your local configuration
-
-# Run tests to verify setup
 python3 -m pytest tests/ -v
 ```
 
@@ -106,16 +100,10 @@ FLASK_DEBUG=1 python3 app.py
 
 ### Python Style
 
-- Follow PEP 8 style guidelines
-- Use type hints for function parameters and return values
+- Follow PEP 8 guidelines
+- Use type hints for function signatures
 - Maximum line length: 120 characters
-- Use docstrings for all public classes and functions
-
-### Documentation Style
-
 - Use Google-style docstrings
-- Include parameter descriptions and return value documentation
-- Add inline comments for non-obvious logic
 
 ### Example
 
@@ -129,15 +117,14 @@ def process_log_entry(
 
     Args:
         line: Raw log line text.
-        parser: Parser instance to use for extraction.
-        strict: If True, raise on unparseable lines instead of returning None.
+        parser: Parser instance for field extraction.
+        strict: If True, raise on unparseable lines.
 
     Returns:
-        Dictionary of extracted fields, or None if the line could not be parsed
-        and strict is False.
+        Dictionary of extracted fields, or None if unparseable.
 
     Raises:
-        ParseError: If strict is True and the line cannot be parsed.
+        ParseError: If strict is True and parsing fails.
     """
     ...
 ```
@@ -146,16 +133,10 @@ def process_log_entry(
 
 ## Commit Messages
 
-### Format
-
-Follow the Conventional Commits specification:
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
 ```
 <type>(<scope>): <description>
-
-[optional body]
-
-[optional footer(s)]
 ```
 
 ### Types
@@ -164,61 +145,39 @@ Follow the Conventional Commits specification:
 |----------|---------------------------------------------|
 | feat     | A new feature                               |
 | fix      | A bug fix                                   |
-| docs     | Documentation only changes                  |
-| style    | Formatting, missing semicolons, etc.        |
-| refactor | Code change that neither fixes nor adds     |
+| docs     | Documentation changes                       |
+| style    | Formatting changes                          |
+| refactor | Code restructuring                          |
 | perf     | Performance improvement                     |
 | test     | Adding or updating tests                    |
-| chore    | Build process or auxiliary tool changes     |
+| chore    | Build/tool changes                          |
 
 ### Examples
 
 ```
 feat(parser): add Apache access log parser
-
-fix(auth): read JWT secret per-call to avoid import-order issue
-
+fix(auth): read JWT secret per-call to avoid import-order bug
 docs(api): add API reference documentation
-
-test(detection): add unit tests for evaluation metrics
-
-refactor(db): consolidate MongoDB connections into single module
+test(detection): add evaluation metrics unit tests
 ```
 
 ---
 
 ## Pull Request Process
 
-### Before Submitting
+1. Ensure code follows the coding standards
+2. Run tests: `python3 -m pytest tests/ -v`
+3. Update documentation if applicable
+4. Add tests for new functionality
+5. Submit PR against `main`
+6. A maintainer will review within 48 hours
 
-1. Ensure your code follows the coding standards
-2. Run the test suite and verify all tests pass:
-   ```bash
-   python3 -m pytest tests/ -v
-   ```
-3. Update documentation if your changes affect:
-   - API endpoints
-   - Configuration options
-   - Module interfaces
-   - Data flow
-4. Add or update tests for your changes
+### PR Description Should Include
 
-### PR Description Template
-
-Your pull request description should include:
-
-1. **What**: A clear description of the changes
-2. **Why**: The motivation or problem being solved
-3. **How**: Brief overview of the implementation approach
-4. **Testing**: How you verified the changes work correctly
-5. **Breaking Changes**: Any backward-incompatible changes
-
-### Review Process
-
-1. Submit your PR against the `main` branch
-2. A maintainer will review your code within 48 hours
-3. Address any requested changes
-4. Once approved, a maintainer will merge your PR
+- **What**: Clear description of changes
+- **Why**: Motivation or problem solved
+- **Testing**: How you verified correctness
+- **Breaking Changes**: Any backward-incompatible changes
 
 ---
 
@@ -226,45 +185,31 @@ Your pull request description should include:
 
 ### Bug Reports
 
-When reporting a bug, please include:
-
-1. **Description**: Clear description of the issue
-2. **Steps to Reproduce**: Minimal steps to reproduce the problem
-3. **Expected Behavior**: What you expected to happen
-4. **Actual Behavior**: What actually happened
-5. **Environment**: Python version, OS, MongoDB version
-6. **Error Output**: Full error messages or stack traces
+Include: description, steps to reproduce, expected vs actual behavior, environment info, and error output.
 
 ### Feature Requests
 
-When requesting a feature, please include:
-
-1. **Problem**: The problem or use case the feature would address
-2. **Proposed Solution**: Your idea for how to solve it
-3. **Alternatives**: Any alternative approaches you considered
-4. **Additional Context**: Any relevant background information
+Include: problem statement, proposed solution, alternatives considered, and implementation notes.
 
 ---
 
-## Project Structure Guide
+## Project Structure
 
-When adding new code, place it in the appropriate module:
-
-| Directory               | What goes here                              |
+| Directory               | Purpose                                     |
 |-------------------------|---------------------------------------------|
-| `parser/`               | New log format parsers                      |
-| `feature_engineering/`  | Feature extraction and data cleaning logic  |
-| `detection/`            | Anomaly detection models and evaluation     |
-| `optimization/`         | GA and model evolution logic                |
-| `scripts/`              | Utility scripts and pipeline runners        |
-| `tests/`                | Test files (mirror the module structure)    |
-| `docs/`                 | Documentation files                         |
+| `parser/`               | Log format parsers                          |
+| `feature_engineering/`  | Feature extraction and cleaning             |
+| `detection/`            | Anomaly detection models                    |
+| `optimization/`         | GA and model evolution                      |
+| `scripts/`              | Pipeline and utility scripts                |
+| `tests/`                | Unit and integration tests                  |
+| `docs/`                 | Documentation                               |
 
 ---
 
 ## License
 
-By contributing to MorphGuard, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
 ---
 
