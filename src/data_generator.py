@@ -135,7 +135,8 @@ class CloudLogGenerator:
     ) -> pd.DataFrame:
         """Generates a batch of cloud security logs with specified anomaly ratio."""
         if start_time is None:
-            current_time = datetime.utcnow()
+            from datetime import timezone
+            current_time = datetime.now(timezone.utc)
         else:
             current_time = start_time
 
