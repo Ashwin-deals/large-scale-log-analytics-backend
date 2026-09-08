@@ -1,0 +1,72 @@
+{
+  "gene_names": [
+    "feature__hour_of_day",
+    "feature__component_encoded",
+    "feature__event_type_encoded",
+    "feature__block_size",
+    "feature__event_frequency",
+    "feature__source_ip_encoded",
+    "feature__destination_ip_encoded",
+    "n_estimators",
+    "max_samples",
+    "max_features",
+    "contamination",
+    "bootstrap"
+  ],
+  "k_folds": 5,
+  "population_size": 32,
+  "num_generations": 10,
+  "num_parents_mating": 16,
+  "generations_completed": 10,
+  "fitness_sample_size": 100000,
+  "one_generation_timing_probe_seconds": 153.40627812500315,
+  "estimated_total_seconds_before_run": 1534.0627812500315,
+  "wall_clock_seconds": 979.1644587499977,
+  "generation_seconds": [
+    153.3199583329988,
+    85.81420883399915,
+    96.10942412500299,
+    85.23127395799747,
+    91.08115745800023,
+    97.75895674999992,
+    78.81454441700043,
+    89.90052612500222,
+    97.82236429199838,
+    103.31070795800042
+  ],
+  "best_fitness_mean_per_generation": [
+    0.5634094042484212,
+    0.6123464546149141,
+    0.6123464546149141,
+    0.6271122577643113,
+    0.6425743043552626,
+    0.6425743043552626,
+    0.6425743043552626,
+    0.6425743043552626,
+    0.6425743043552626,
+    0.6425743043552626
+  ],
+  "best_fitness_std_per_generation": [
+    0.01573273571223502,
+    0.010504065945577061,
+    0.010504065945577061,
+    0.01733946595916004,
+    0.010696178820799327,
+    0.010696178820799327,
+    0.010696178820799327,
+    0.010696178820799327,
+    0.010696178820799327,
+    0.010696178820799327
+  ],
+  "best_fitness_mean_on_fitness_subsample": 0.6425743043552626,
+  "best_fitness_std_on_fitness_subsample": 0.010696178820799327,
+  "best_fold_scores_on_fitness_subsample": [
+    0.6337448559670782,
+    0.6527331189710611,
+    0.6288065843621399,
+    0.6566666666666666,
+    0.6409202958093673
+  ],
+  "high_variance_std_threshold": 0.05,
+  "high_variance_flagged": false
+}

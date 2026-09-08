@@ -1,0 +1,68 @@
+{
+  "chromosome": {
+    "selected_features": [
+      "hour_of_day",
+      "component_encoded",
+      "event_frequency",
+      "destination_ip_encoded"
+    ],
+    "feature_mask": {
+      "hour_of_day": 1,
+      "component_encoded": 1,
+      "event_type_encoded": 0,
+      "block_size": 0,
+      "event_frequency": 1,
+      "source_ip_encoded": 0,
+      "destination_ip_encoded": 1
+    },
+    "n_estimators": 50,
+    "max_samples": 0.9870854086995406,
+    "max_features": 0.8615378865278277,
+    "contamination": 0.03161968666713354,
+    "bootstrap": false
+  },
+  "threshold_gene": "contamination",
+  "threshold_note": "IsolationForest.predict() derives its Normal/Anomaly decision directly from `contamination` (via the fitted offset_), so contamination is searched as the threshold gene instead of a separate manual score cutoff.",
+  "fitness_metric": "mean(f1_score(pos_label='Anomaly')) across 5 stratified folds",
+  "fitness_metric_note": "V1/V2 scored each candidate with a single fit+score on one stratified subsample. That let a V3 attempt (see data/evaluation/v1_v2_v3_comparison.md) look fine on its own fitness sample (0.6891) while collapsing on the full dataset -- its contamination threshold was calibrated to one data slice and badly miscalibrated everywhere else. k-fold CV scores each candidate on k held-out slices of the same fitness sample and reports both the mean (used as fitness) and the std across folds, so an unstable candidate is visible even when its mean still looks competitive.",
+  "fitness_sample_size": 100000,
+  "k_folds": 5,
+  "best_fitness_mean_on_fitness_subsample": 0.6425743043552626,
+  "best_fitness_std_on_fitness_subsample": 0.010696178820799327,
+  "best_fold_scores_on_fitness_subsample": [
+    0.6337448559670782,
+    0.6527331189710611,
+    0.6288065843621399,
+    0.6566666666666666,
+    0.6409202958093673
+  ],
+  "high_variance_std_threshold": 0.05,
+  "high_variance_flagged": false,
+  "full_dataset_metrics": {
+    "accuracy": 0.9780736304496392,
+    "precision": 0.6197949124695484,
+    "recall": 0.6497208694619313,
+    "f1": 0.6344051726637479,
+    "confusion_matrix": {
+      "labels": [
+        "Normal",
+        "Anomaly"
+      ],
+      "matrix": [
+        [
+          551512,
+          6711
+        ],
+        [
+          5898,
+          10940
+        ]
+      ]
+    },
+    "support": {
+      "total": 575061,
+      "normal": 558223,
+      "anomaly": 16838
+    }
+  }
+}
