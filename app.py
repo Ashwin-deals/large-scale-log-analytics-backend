@@ -17,7 +17,13 @@ from sources_api import MAX_UPLOAD_BYTES, sources_bp
 load_dotenv()
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-this-secret")
-CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:3000")
+# Comma-separated, so a deployment can name several. The default covers the
+# dev server under both spellings of the loopback address: "localhost" and
+# "127.0.0.1" are different *origins* to a browser, so listing only one meant
+# opening the dashboard at the other spelling had every response blocked and
+# surfaced in the UI as a bare "Failed to fetch" with a healthy backend.
+CORS_ORIGIN = os.getenv("CORS_ORIGIN", "http://localhost:3000,http://127.0.0.1:3000")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGIN.split(",") if origin.strip()]
 JWT_TTL_HOURS = 24
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -25,7 +31,7 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 app = Flask(__name__)
 # allow_headers must include Authorization, or the browser's preflight blocks
 # the bearer token the dashboard sends on every pipeline request.
-CORS(app, origins=[CORS_ORIGIN], allow_headers=["Content-Type", "Authorization"])
+CORS(app, origins=CORS_ORIGINS, allow_headers=["Content-Type", "Authorization"])
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 app.register_blueprint(pipeline_bp)
 app.register_blueprint(sources_bp)
@@ -115,4 +121,12 @@ if __name__ == "__main__":
     # Debug defaults off: the Werkzeug debugger exposes an interactive console
     # and full tracebacks. Opt in with FLASK_DEBUG=1 when you need it.
     debug = os.getenv("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
-    app.run(port=5000, debug=debug, threaded=True)
+    # "::" binds dual-stack (IPv6 *and* IPv4), which "0.0.0.0" does not.
+    # On macOS "localhost" resolves to IPv6 ::1 before IPv4 and Vite serves
+    # the dashboard from [::1]:3000, so an IPv4-only server left a browser
+    # fetching http://localhost:5000 talking to nothing: connection refused,
+    # surfaced in the UI as a bare "Failed to fetch" while curl against
+    # 127.0.0.1 looked perfectly healthy. Binding "::" answers on
+    # localhost, 127.0.0.1 and [::1] alike, so it cannot depend on which
+    # address family the browser happens to pick.
+    app.run(host="::", port=5000, debug=debug, threaded=True)
