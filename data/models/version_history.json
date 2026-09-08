@@ -82,5 +82,57 @@
     "promoted_model_path": null,
     "promoted_metrics_path": null,
     "archived_candidate_path": "data/models/archive/isolation_forest_candidate_rejected_20260907T061454442514.pkl"
+  },
+  {
+    "timestamp": "2026-09-08T13:56:19.868267+00:00",
+    "metric": "f1",
+    "promoted": false,
+    "current_version": 2,
+    "current_model_path": "data/models/isolation_forest_v2.pkl",
+    "current_metric_value": 0.6787834566017711,
+    "candidate_model_path": "data/models/isolation_forest_candidate.pkl",
+    "candidate_metric_value": 0.6250494838454277,
+    "new_version": null,
+    "promoted_model_path": null,
+    "promoted_metrics_path": null,
+    "archived_candidate_path": "data/models/archive/isolation_forest_candidate_rejected_20260908T135619868267.pkl"
+  },
+  {
+    "timestamp": "2026-09-08T14:17:30.044298+00:00",
+    "event": "refit",
+    "metric": "f1",
+    "promoted": false,
+    "reason": "Refitted on rebuilt features after a category-encoding change.",
+    "versions": [
+      {
+        "version": 1,
+        "before": 0.17935263623719813,
+        "after": 0.17935263623719813
+      },
+      {
+        "version": 2,
+        "before": 0.6787834566017711,
+        "after": 0.6787834566017711
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-09-08T15:02:46.555747+00:00",
+    "event": "refit",
+    "metric": "f1",
+    "promoted": false,
+    "reason": "Refitted on rebuilt features after a category-encoding change.",
+    "versions": [
+      {
+        "version": 1,
+        "before": 0.17935263623719813,
+        "after": 0.11913904443273717
+      },
+      {
+        "version": 2,
+        "before": 0.6787834566017711,
+        "after": 0.5288384512683578
+      }
+    ]
   }
 ]
