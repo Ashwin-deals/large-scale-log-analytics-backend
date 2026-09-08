@@ -82,5 +82,24 @@
     "promoted_model_path": null,
     "promoted_metrics_path": null,
     "archived_candidate_path": "data/models/archive/isolation_forest_candidate_rejected_20260907T061454442514.pkl"
+  },
+  {
+    "timestamp": "2026-09-08T07:36:55.281738+00:00",
+    "event": "refit",
+    "metric": "f1",
+    "promoted": false,
+    "reason": "Refitted on rebuilt features after a category-encoding change.",
+    "versions": [
+      {
+        "version": 1,
+        "before": 0.27290178914228674,
+        "after": 0.27290178914228674
+      },
+      {
+        "version": 2,
+        "before": 0.579884290164664,
+        "after": 0.579884290164664
+      }
+    ]
   }
 ]

@@ -102,18 +102,26 @@ def decode_chromosome(genes) -> Chromosome:
     )
 
 
-def build_model(chromosome: Chromosome) -> IsolationForest:
+def build_model(chromosome: Chromosome, random_state: int = RANDOM_STATE) -> IsolationForest:
+    """Build an Isolation Forest for this chromosome.
+
+    random_state is a parameter rather than a constant so a retrain can explore
+    a different corner of the search space. Pinned to RANDOM_STATE it reproduces
+    the same model from the same data every time, which is what made every
+    retrain return a bit-identical candidate that could never beat the current
+    model (see the repeated "0.6788 did not beat 0.6788" history entries).
+    """
     return IsolationForest(
         n_estimators=chromosome.n_estimators,
         max_samples=chromosome.max_samples,
         max_features=chromosome.max_features,
         contamination=chromosome.contamination,
         n_jobs=-1,
-        random_state=RANDOM_STATE,
+        random_state=random_state,
     )
 
 
-def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series) -> float:
+def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_STATE) -> float:
     """
     Trains an Isolation Forest with the chromosome's feature subset and
     hyperparameters (unsupervised: y is only used to score the result, never
@@ -130,7 +138,7 @@ def score_chromosome(chromosome: Chromosome, X: pd.DataFrame, y: pd.Series) -> f
         return 0.0
 
     selected = chromosome.selected_features
-    model = build_model(chromosome)
+    model = build_model(chromosome, random_state=random_state)
     model.fit(X[selected])
     raw_predictions = model.predict(X[selected])
     predicted_label = np.where(raw_predictions == -1, "Anomaly", "Normal")
@@ -159,10 +167,10 @@ def stratified_subsample(
     return subsample.reset_index(drop=True)
 
 
-def make_fitness_func(X: pd.DataFrame, y: pd.Series) -> Callable:
+def make_fitness_func(X: pd.DataFrame, y: pd.Series, random_state: int = RANDOM_STATE) -> Callable:
     def fitness_func(ga_instance, solution, solution_idx):
         chromosome = decode_chromosome(solution)
-        return score_chromosome(chromosome, X, y)
+        return score_chromosome(chromosome, X, y, random_state=random_state)
 
     return fitness_func
 
@@ -188,7 +196,7 @@ def run_ga(
     num_parents_mating: int,
     random_seed: int = RANDOM_STATE,
 ) -> tuple[pygad.GA, GARunResult]:
-    fitness_func = make_fitness_func(X, y)
+    fitness_func = make_fitness_func(X, y, random_state=random_seed)
 
     best_fitness_per_generation: list[float] = []
     generation_seconds: list[float] = []

@@ -19,6 +19,7 @@ Usage:
 
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -37,6 +38,7 @@ from optimization.ga_isolation_forest import Chromosome, build_model
 
 GA_CONFIG_PATH = Path("data/optimization/ga_best_config.json")
 CURRENT_VERSION_PATH = Path("data/models/current_version.json")
+VERSION_HISTORY_PATH = Path("data/models/version_history.json")
 
 V1_MODEL_PATH = Path("data/models/isolation_forest_v1.pkl")
 V1_METRICS_PATH = Path("data/evaluation/baseline_isolation_forest_metrics.json")
@@ -63,6 +65,9 @@ def main():
     merged = load_labeled_features()
     fingerprint = CategoryEncoder.load().fingerprint()
     print(f"Refitting on {len(merged):,} blocks — vocabulary {fingerprint}\n")
+
+    before_v1 = (json.loads(V1_METRICS_PATH.read_text())["f1"]
+                 if V1_METRICS_PATH.exists() else float("nan"))
 
     # --- V1: baseline, all features, default hyperparameters -----------------
     v1 = build_isolation_forest()
@@ -95,8 +100,26 @@ def main():
     # Keep the deployment pointer's recorded metric in step with the refit, or
     # the promotion check would compare candidates against a stale number.
     current = json.loads(CURRENT_VERSION_PATH.read_text())
-    current["metric_value"] = v2_metrics[current.get("metric", "f1")]
+    metric = current.get("metric", "f1")
+    before_v2 = current["metric_value"]
+    current["metric_value"] = v2_metrics[metric]
     CURRENT_VERSION_PATH.write_text(json.dumps(current, indent=2))
+
+    # Record the refit so the timeline explains why earlier entries quote
+    # different numbers than the metrics now shown next to them.
+    history = json.loads(VERSION_HISTORY_PATH.read_text()) if VERSION_HISTORY_PATH.exists() else []
+    history.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "refit",
+        "metric": metric,
+        "promoted": False,
+        "reason": "Refitted on rebuilt features after a category-encoding change.",
+        "versions": [
+            {"version": 1, "before": before_v1, "after": v1_metrics[metric]},
+            {"version": 2, "before": before_v2, "after": v2_metrics[metric]},
+        ],
+    })
+    VERSION_HISTORY_PATH.write_text(json.dumps(history, indent=2))
 
     print(f"\nBoth models stamped with vocabulary {fingerprint}.")
     print(f"Updated {CURRENT_VERSION_PATH} metric_value -> {current['metric_value']:.4f}")
