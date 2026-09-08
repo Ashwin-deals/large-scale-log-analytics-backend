@@ -4,20 +4,37 @@ Uploads are parsed off the request thread: a large log would otherwise hold
 the connection open past any sane timeout. The record lands in Mongo as
 "processing" and a worker flips it to "processed" or "failed", which is the
 lifecycle the dashboard's status column already renders.
+
+A processed upload isn't just parsed — it runs through the same clean ->
+extract-features -> predict pipeline as the base HDFS dataset, scored
+against whichever model is currently deployed. There's no per-account
+retraining yet (the base dataset is still the one shared training set); this
+only wires up real *inference* on a user's own file. See _score_upload.
 """
 
 import threading
+from bson import ObjectId
+from bson.errors import InvalidId
 from datetime import datetime, timezone
 from pathlib import Path
 
+import joblib
+import pandas as pd
 from flask import Blueprint, g, jsonify, request
 from werkzeug.utils import secure_filename
 
 from auth import token_required
 from db import uploads
+from detection.predict import predict
+from feature_engineering.data_cleaner import HDFSDataCleaner
+from feature_engineering.feature_extractor import HDFSFeatureExtractor
 from parser.hdfs_parser import HDFSParser
+from pipeline_api import resolve_current_deployment
 
 sources_bp = Blueprint("sources", __name__)
+
+UPLOAD_PROCESSED_DIR = Path("data/uploads/processed")
+UPLOAD_RESULTS_DIR = Path("data/uploads/results")
 
 UPLOAD_DIR = Path("data/uploads")
 ALLOWED_EXTENSIONS = {".log", ".json", ".csv", ".txt"}
@@ -45,24 +62,71 @@ def _serialize(doc):
         "total_lines": doc.get("total_lines"),
         "status": doc.get("status", "processing"),
         "error": doc.get("error"),
+        "blocks_analyzed": doc.get("blocks_analyzed"),
+        "anomalies_detected": doc.get("anomalies_detected"),
+        "anomaly_rate_pct": doc.get("anomaly_rate_pct"),
+        "model_version": doc.get("model_version"),
         "uploaded_at": doc["uploaded_at"].isoformat() if doc.get("uploaded_at") else None,
         "uploaded_by": doc.get("uploaded_by"),
     }
 
 
+def _score_upload(recognized_frame: pd.DataFrame, upload_id) -> dict:
+    """Runs a freshly uploaded (and already-recognized) HDFS log through the
+    same clean -> extract-features -> predict stages as the base dataset,
+    scored against whichever model is currently deployed.
+
+    Per-block predictions are written to UPLOAD_RESULTS_DIR/<upload_id>.csv
+    for /api/sources/uploads/<id>/detections to read back; this function
+    returns just the summary that lands on the upload's Mongo doc.
+
+    HDFSFeatureExtractor.extract()'s *return value* drops block_id (only the
+    CSV it writes keeps it — see feature_extractor.py), so read the CSV back
+    rather than chaining its return value into predict(), same as every other
+    caller in this codebase (scripts/build_hdfs_features.py included).
+    """
+    UPLOAD_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    UPLOAD_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    cleaned = HDFSDataCleaner().clean(recognized_frame, UPLOAD_PROCESSED_DIR / f"{upload_id}_cleaned.csv")
+    features_path = UPLOAD_PROCESSED_DIR / f"{upload_id}_features.csv"
+    HDFSFeatureExtractor().extract(cleaned, features_path)
+    features = pd.read_csv(features_path)
+
+    if len(features) == 0:
+        return {"blocks_analyzed": 0}
+
+    current = resolve_current_deployment()
+    model = joblib.load(current["model_path"])
+    feature_columns = list(model.feature_names_in_)
+
+    results_path = UPLOAD_RESULTS_DIR / f"{upload_id}.csv"
+    predictions = predict(model, features, output_path=results_path, feature_columns=feature_columns)
+
+    total = len(predictions)
+    anomalies = int((predictions["predicted_label"] == "Anomaly").sum())
+    return {
+        "blocks_analyzed": total,
+        "anomalies_detected": anomalies,
+        "anomaly_rate_pct": round(anomalies / total * 100, 2) if total else 0.0,
+        "model_version": current.get("version"),
+    }
+
+
 def _process_upload(upload_id, stored_path):
-    """Parse the saved file and record how many log lines were recognized.
+    """Parse the saved file, then run recognized lines through detection.
 
     The parser never rejects a line: anything it cannot match comes back as a
     row of nulls with event_type "OTHER". Counting rows would therefore report
     a plain CSV as successfully ingested with one "record" per line, so count
-    only lines that actually matched the HDFS format and fail the upload when
-    none of them did.
+    only lines that actually matched the HDFS format, fail the upload when
+    none of them did, and only score the recognized subset.
     """
     try:
         frame = HDFSParser().parse(str(stored_path))
         total_lines = int(len(frame))
-        recognized = int(frame["date"].notna().sum()) if total_lines else 0
+        recognized_mask = frame["date"].notna() if total_lines else frame.index < 0
+        recognized = int(recognized_mask.sum())
 
         if recognized == 0:
             update = {
@@ -72,7 +136,16 @@ def _process_upload(upload_id, stored_path):
                 "error": "No lines matched the HDFS log format — this file does not look like an HDFS log.",
             }
         else:
-            update = {"status": "processed", "records": recognized, "total_lines": total_lines}
+            summary = _score_upload(frame[recognized_mask].reset_index(drop=True), upload_id)
+            if summary["blocks_analyzed"] == 0:
+                update = {
+                    "status": "failed",
+                    "records": recognized,
+                    "total_lines": total_lines,
+                    "error": "Recognized lines didn't contain any complete blocks to analyze.",
+                }
+            else:
+                update = {"status": "processed", "records": recognized, "total_lines": total_lines, **summary}
 
         update["processed_at"] = datetime.now(timezone.utc)
         uploads.update_one({"_id": upload_id}, {"$set": update})
@@ -140,3 +213,51 @@ def list_uploads():
 @token_required
 def list_connectors():
     return jsonify({"connectors": CONNECTORS})
+
+
+@sources_bp.get("/api/sources/uploads/<upload_id>/detections")
+@token_required
+def upload_detections(upload_id):
+    try:
+        doc = uploads.find_one({"_id": ObjectId(upload_id)})
+    except InvalidId:
+        return jsonify({"error": "Invalid upload id."}), 400
+
+    if doc is None:
+        return jsonify({"error": "Upload not found."}), 404
+
+    results_path = UPLOAD_RESULTS_DIR / f"{upload_id}.csv"
+    if doc.get("status") != "processed" or not results_path.exists():
+        return jsonify({"error": "Detection results are not available for this upload."}), 404
+
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+        limit = min(max(int(request.args.get("limit", 25)), 1), 200)
+    except (TypeError, ValueError):
+        page, limit = 1, 25
+
+    predictions = pd.read_csv(results_path).sort_values("anomaly_score", ascending=False).reset_index(drop=True)
+    total = len(predictions)
+    start = (page - 1) * limit
+    page_rows = predictions.iloc[start : start + limit]
+
+    return jsonify(
+        {
+            "upload": {"id": str(doc["_id"]), "name": doc.get("name")},
+            "blocks_analyzed": doc.get("blocks_analyzed"),
+            "anomalies_detected": doc.get("anomalies_detected"),
+            "anomaly_rate_pct": doc.get("anomaly_rate_pct"),
+            "model_version": doc.get("model_version"),
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "results": [
+                {
+                    "block_id": row.block_id,
+                    "predicted_label": row.predicted_label,
+                    "anomaly_score": round(float(row.anomaly_score), 4),
+                }
+                for row in page_rows.itertuples()
+            ],
+        }
+    )
