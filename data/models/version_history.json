@@ -134,5 +134,19 @@
         "after": 0.5288384512683578
       }
     ]
+  },
+  {
+    "timestamp": "2026-09-08T19:27:49.024610+00:00",
+    "metric": "f1",
+    "promoted": true,
+    "current_version": 2,
+    "current_model_path": "data/models/isolation_forest_v2.pkl",
+    "current_metric_value": 0.5288384512683578,
+    "candidate_model_path": "data/models/isolation_forest_candidate.pkl",
+    "candidate_metric_value": 0.5621780194619348,
+    "new_version": 3,
+    "promoted_model_path": "data/models/isolation_forest_v3.pkl",
+    "promoted_metrics_path": "data/evaluation/isolation_forest_v3_metrics.json",
+    "archived_candidate_path": null
   }
 ]

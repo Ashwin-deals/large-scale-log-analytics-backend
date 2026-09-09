@@ -37,13 +37,26 @@ DEFAULT_RAW_LOG_PATH = Path("data/testing/review_dataset_raw.log")
 DEFAULT_ANSWER_KEY_PATH = Path("data/testing/review_dataset_answer_key.csv")
 
 OUT_DIR = Path("data/testing")
-CLEANED_PATH = OUT_DIR / "review_dataset_cleaned.csv"
-FEATURES_PATH = OUT_DIR / "review_dataset_features.csv"
-PREDICTIONS_PATH = OUT_DIR / "review_dataset_predictions.csv"
-METRICS_PATH = Path("data/evaluation/review_dataset_metrics.json")
 
 
-def run_pipeline(raw_log_path: Path) -> pd.DataFrame:
+def output_paths(raw_log_path: Path) -> dict[str, Path]:
+    """Name every output after the input log.
+
+    Fixed output names meant verifying a second sample silently overwrote the
+    first one's predictions and metrics, leaving two datasets sharing one set
+    of numbers — the kind of mix-up that is invisible until someone quotes the
+    wrong figure.
+    """
+    stem = raw_log_path.stem
+    return {
+        "cleaned": OUT_DIR / f"{stem}_cleaned.csv",
+        "features": OUT_DIR / f"{stem}_features.csv",
+        "predictions": OUT_DIR / f"{stem}_predictions.csv",
+        "metrics": Path("data/evaluation") / f"{stem}_metrics.json",
+    }
+
+
+def run_pipeline(raw_log_path: Path, out: dict[str, Path]) -> pd.DataFrame:
     """Parser -> cleaner -> feature extractor -> deployed model.
 
     Nothing here reads or references the answer key. The model is loaded
@@ -58,11 +71,11 @@ def run_pipeline(raw_log_path: Path) -> pd.DataFrame:
     print(f"      {len(recognized):,} / {len(frame):,} lines recognized as HDFS log lines")
 
     print("[2/4] Cleaning ...")
-    cleaned = HDFSDataCleaner().clean(recognized, CLEANED_PATH)
+    cleaned = HDFSDataCleaner().clean(recognized, out["cleaned"])
 
     print("[3/4] Extracting features ...")
-    HDFSFeatureExtractor().extract(cleaned, FEATURES_PATH)
-    features = pd.read_csv(FEATURES_PATH)
+    HDFSFeatureExtractor().extract(cleaned, out["features"])
+    features = pd.read_csv(out["features"])
     print(f"      {len(features):,} blocks")
 
     current = resolve_current_deployment()
@@ -74,7 +87,7 @@ def run_pipeline(raw_log_path: Path) -> pd.DataFrame:
     # features has no "Label" column at all, so predict() has nothing to
     # compare against -- true_label cannot leak into this step even by
     # accident. Only block_id, predicted_label, anomaly_score come out.
-    predictions = predict(model, features, output_path=PREDICTIONS_PATH, feature_columns=feature_columns)
+    predictions = predict(model, features, output_path=out["predictions"], feature_columns=feature_columns)
     return predictions
 
 
@@ -87,8 +100,9 @@ def main():
     if not args.raw_log.exists():
         raise SystemExit(f"{args.raw_log} not found.")
 
-    predictions = run_pipeline(args.raw_log)
-    print(f"\nWrote {PREDICTIONS_PATH} ({len(predictions):,} rows: block_id, predicted_label, anomaly_score)")
+    out = output_paths(args.raw_log)
+    predictions = run_pipeline(args.raw_log, out)
+    print(f"\nWrote {out['predictions']} ({len(predictions):,} rows: block_id, predicted_label, anomaly_score)")
     print("No ground truth was read at any point up to this line.\n")
 
     # --- Only now does the answer key enter the picture -------------------
@@ -106,7 +120,7 @@ def main():
             f"answer-key row and were dropped before scoring."
         )
 
-    metrics = evaluate(joined, metrics_path=METRICS_PATH)
+    metrics = evaluate(joined, metrics_path=out["metrics"])
     metrics["error_rate"] = 1 - metrics["accuracy"]
     (tn, fp), (fn, tp) = metrics["confusion_matrix"]["matrix"]
     metrics["false_positive_rate"] = fp / (fp + tn) if (fp + tn) else 0.0
@@ -117,7 +131,7 @@ def main():
     print(f"\nError rate:            {metrics['error_rate']:.4f}")
     print(f"False positive rate:   {metrics['false_positive_rate']:.4f}")
     print(f"False negative rate:   {metrics['false_negative_rate']:.4f}")
-    print(f"\nWrote {METRICS_PATH}")
+    print(f"\nWrote {out['metrics']}")
 
 
 if __name__ == "__main__":

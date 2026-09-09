@@ -1,6 +1,16 @@
 import os
 import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+# Every data path in this project is relative ("data/models/...",
+# "data/features/category_encoders.json"). Started from any other directory,
+# the server silently resolves them elsewhere: uploads land outside the repo,
+# the category vocabulary reads as empty, and predictions come back as
+# confident nonsense with no error anywhere. Pin the working directory to the
+# repo root before anything imports those defaults, so where the server was
+# launched from cannot change what it computes.
+os.chdir(Path(__file__).resolve().parent)
 
 import bcrypt
 import jwt

@@ -8,9 +8,11 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
+from pymongo.errors import PyMongoError
 
 from auth import token_required
+from db import uploads
 
 from detection.isolation_forest import save_model
 from detection.evaluate import evaluate, print_metrics_table
@@ -296,22 +298,67 @@ def invalidate_prediction_cache():
 # GET /api/dashboard
 # ---------------------------------------------------------------------------
 
+def latest_upload_view(email: str) -> dict | None:
+    """The signed-in user's most recent processed upload that this machine
+    actually holds results for.
+
+    Scoped by account and by local file: MONGO_URI points at a shared cluster,
+    so the collection also carries uploads made elsewhere, whose result files
+    only exist on the machine that scored them.
+    """
+    if not email:
+        return None
+    try:
+        for doc in uploads.find({"uploaded_by": email, "status": "processed"}).sort("uploaded_at", -1).limit(10):
+            blocks_path = UPLOAD_BLOCKS_DIR / f"{doc['_id']}_blocks.csv"
+            if blocks_path.exists():
+                return {"id": str(doc["_id"]), "name": doc.get("name"),
+                        "uploaded_at": doc["uploaded_at"].isoformat() if doc.get("uploaded_at") else None,
+                        "blocks_path": blocks_path}
+    except PyMongoError:
+        return None
+    return None
+
+
 @pipeline_bp.get("/api/dashboard")
 @token_required
 def dashboard():
     stats = _load_dataset_stats()
-    predictions = get_current_predictions()
     current = resolve_current_deployment()
     current_metrics = _metrics_for(current["metrics_path"]) or {}
+
+    # Once a log file has been uploaded the dashboard reports on *that file*;
+    # ?scope=dataset switches back to the full deployed dataset.
+    scope = (request.args.get("scope") or "auto").strip().lower()
+    upload_view = None if scope == "dataset" else latest_upload_view((g.user or {}).get("email"))
+
+    if upload_view is not None:
+        predictions = pd.read_csv(upload_view["blocks_path"])
+        predictions["first_seen"] = pd.to_datetime(predictions["first_seen"], errors="coerce")
+        predictions["severity"] = _compute_severity(
+            predictions["anomaly_score"], predictions["predicted_label"] == "Anomaly"
+        )
+        # This file's own line counts stand in for the dataset-wide stats.
+        stats = {
+            "total_events": int(pd.to_numeric(predictions["event_frequency"], errors="coerce").fillna(0).sum()),
+            "events_per_day": {},
+            "date_range": {
+                "min": predictions["first_seen"].min().isoformat() if len(predictions) else None,
+                "max": predictions["first_seen"].max().isoformat() if len(predictions) else None,
+            },
+        }
+        from_uploads = pd.Series(True, index=predictions.index)
+    else:
+        predictions = get_current_predictions()
+        from_uploads = predictions["source"] == "upload"
 
     # Uploads contribute their own raw log lines on top of the base dataset's,
     # counted per block via event_frequency (dataset rows carry no count — the
     # stats file already totals those).
-    from_uploads = predictions["source"] == "upload"
     uploaded_events = int(pd.to_numeric(predictions.loc[from_uploads, "event_frequency"], errors="coerce").fillna(0).sum())
     uploaded_blocks = int(from_uploads.sum())
 
-    total_events = stats.get("total_events", 0) + uploaded_events
+    total_events = stats.get("total_events", 0) if upload_view else stats.get("total_events", 0) + uploaded_events
     total_blocks = len(predictions)
     anomalous = int((predictions["predicted_label"] == "Anomaly").sum())
 
@@ -429,6 +476,12 @@ def dashboard():
                 # every block in that file was already in the dataset.
                 "uploaded_blocks_added": uploaded_blocks,
                 "uploaded_logs_added": uploaded_events,
+            },
+            # Which data this page is describing: the uploaded file it switched
+            # to, or the full deployed dataset.
+            "view": {
+                "mode": "upload" if upload_view else "dataset",
+                "upload": {k: upload_view[k] for k in ("id", "name", "uploaded_at")} if upload_view else None,
             },
             "volume_by_day": volume_by_day,
             "severity_mix": severity_mix,

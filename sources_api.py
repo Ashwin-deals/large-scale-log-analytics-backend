@@ -244,6 +244,10 @@ def upload_log():
     return jsonify(_serialize(doc)), 201
 
 
+def current_user_email():
+    return (g.user or {}).get("email")
+
+
 @sources_bp.get("/api/sources/uploads")
 @token_required
 def list_uploads():
@@ -252,8 +256,14 @@ def list_uploads():
     except ValueError:
         limit = 25
 
-    rows = list(uploads.find().sort("uploaded_at", -1).limit(limit))
-    return jsonify({"uploads": [_serialize(r) for r in rows], "total": uploads.count_documents({})})
+    # Scoped to the signed-in account. MONGO_URI points at a shared cluster,
+    # so an unfiltered find() listed uploads made by other people on other
+    # machines — rows whose result files live on those machines and whose
+    # anomaly counts came from a different local model, which read as this
+    # pipeline being non-deterministic for the same file.
+    owner = {"uploaded_by": current_user_email()}
+    rows = list(uploads.find(owner).sort("uploaded_at", -1).limit(limit))
+    return jsonify({"uploads": [_serialize(r) for r in rows], "total": uploads.count_documents(owner)})
 
 
 @sources_bp.get("/api/sources/connectors")
@@ -270,7 +280,8 @@ def upload_detections(upload_id):
     except InvalidId:
         return jsonify({"error": "Invalid upload id."}), 400
 
-    if doc is None:
+    if doc is None or doc.get("uploaded_by") != current_user_email():
+        # Same-cluster uploads from another account are not this user's to read.
         return jsonify({"error": "Upload not found."}), 404
 
     results_path = UPLOAD_RESULTS_DIR / f"{upload_id}.csv"
