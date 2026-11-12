@@ -448,7 +448,8 @@ Re-cost the policy with overridden parameters. All body fields are optional; omi
 | weights | object | Any of `anomaly_score`, `event_frequency`, `block_size` (non-negative, rescaled to sum to 1) |
 | t_hot, t_warm | float | Thresholds, with `0 ≤ t_warm < t_hot ≤ 1` |
 | summary_fraction | float | In (0, 1] |
-| warm_credit | float | Retention credit for a WARM anomaly, in [0, 1] |
+| warm_credit | float | Most retention credit a WARM anomaly can earn, in [0, 1] |
+| warm_ref_fraction | float | Summary share of a block that earns the full `warm_credit`, in (0, 1]; thinner summaries earn proportionally less (default 0.25) |
 | retention_target | float | In [0, 1] |
 | split | string | `holdout` (default), `tune` or `all` |
 

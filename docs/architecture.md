@@ -112,36 +112,36 @@ The stream processor loads the batch-trained models from disk: the early-warning
 ### 3.6 Smart Storage (`smart_storage/`, `storage_api.py`)
 Smart Storage sits after the anomaly-score step. Each block gets an importance score: a weighted sum of four parts, each normalized on the tuning half.
 - **Parts:** the Isolation Forest anomaly score, `event_frequency`, the `block_size` percentile, and a fixed-weight error flag.
-- **Tiers:** the score places the block in **HOT** (keep every line), **WARM** (keep `max(1, round(f x event_frequency))` lines) or **COLD** (keep one metadata line).
+- **Tiers:** the score places the block in **HOT** (keep every line), **WARM** (keep one metadata line plus a `round(f x event_frequency)`-line summary) or **COLD** (keep one metadata line). WARM therefore never costs less than COLD.
 - **What the GA tunes:** the three weights, both thresholds, and `f`.
-- **Fitness:** storage saved, minus a penalty when weighted anomaly retention falls below the target. Weighted retention counts HOT = 1, WARM = `warm_credit`, COLD = 0.
+- **Fitness:** storage saved, minus a penalty when weighted anomaly retention falls below the target. Weighted retention counts HOT = 1, COLD = 0, and each WARM anomaly earns `warm_credit x min(1, summary_lines / (warm_ref_fraction x event_frequency))`: full credit (default 0.5) only when the summary keeps at least `warm_ref_fraction` (default 0.25) of the block, proportionally less below that.
 - **Clean evaluation:** the deployed model's hyperparameters are refitted on a stratified tune half, so the held-out half is scored by a model that never saw it.
 
-Results (`data/storage/storage_report.json`):
+Results (`data/storage/storage_report.json`). These are the numbers from before the WARM fix (flat credit), still in the committed report until the GA is rerun on the full 575,061 blocks. On a 150,000-block representative sample the fixed rule gives 68.42% saved, full retention 0.9504, weighted 0.9517 and coverage 0.9668, and still beats every baseline.
 - **Split:** 287,530 tuning blocks and 287,531 held-out blocks, each with 8,419 anomalies.
 - **Learned policy:** weights 0.750 (anomaly score), 0.073 (event frequency) and 0.177 (block size); HOT threshold 0.1723; WARM threshold 0.0493; summary fraction 0.0565.
 - **On the held-out half:** it keeps 1,745,197 of 5,587,093 lines, saving **68.76%**. Weighted retention is **0.9676** against a 0.95 target; full (HOT-only) retention is 0.9356; coverage is 0.9996.
 - **Comparison:** it beats every baseline on the same penalised fitness.
-- **Caveat:** WARM holds 74.9% of held-out blocks, but 99.98% of WARM blocks keep exactly one line, the same cost as COLD. Because WARM credit does not depend on summary size, the GA has no reason to keep more than one line.
+- **Fixed: WARM tier collapse.** Under the old rule (WARM cost `max(1, round(f x lines))`, flat credit), WARM held 74.9% of held-out blocks and 99.98% of them kept exactly one line: the COLD cost, but with free credit. Charging the metadata line separately and making credit proportional to the summary removes that free credit. On the 150k-block sample, COLD is a real tier again (54% of held-out blocks), WARM keeps 1.33 lines per block on average, and the 0.95 target is met by full (HOT-only) retention of 0.9504 rather than by WARM credit.
 
 ### 3.7 Early Warning (`early_warning/`, `early_warning_api.py`)
 Early warning flags a block from its first k events, for k in {3, 5, 10, 20}.
 - **Features:** `prefix_features.py` builds them in one chunked pass over `hdfs_cleaned.csv`, keeping per-block running totals rather than the events. The features are event and type counts, elapsed time, distinct event types and components, WARN/ERROR counts, the running block size, and encoded first/dominant categories.
 - **Model:** one Isolation Forest per k, fitted on a stratified 70% training split. A GA tunes its alert threshold, as a quantile of training scores, for F1.
-- **Lead time:** the fraction of a block's events not yet seen when the alert fires.
+- **Lead time:** the fraction of a block's events not yet seen when the alert fires, and the log-time seconds from the alert to the block's last line. Lead in seconds is log time from the alert (the k-th event) to the block's last log line (`lead_time_seconds` in the report). In HDFS a block's last line is often a much later read or delete, so this is time before the block's last line, not time before anyone would notice a problem.
 
 Results (`data/evaluation/early_warning_report.json`, 172,519 test blocks with 5,051 anomalies):
 
-| k | Precision | Recall | F1 | False-alarm rate | Mean lead (true alerts) | Still-running blocks: F1 |
-|---|---|---|---|---|---|---|
-| 3 | 0.1834 | 0.1966 | 0.1898 | 2.64% | 0.067 | 0.0197 |
-| 5 | 0.8833 | 0.3671 | 0.5186 | 0.15% | 0.012 | 0.0160 |
-| 10 | 0.8812 | 0.3979 | 0.5483 | 0.16% | 0.049 | 0.0980 |
-| 20 | 0.8490 | 0.5722 | 0.6836 | 0.31% | 0.124 | 0.5996 |
+| k | Precision | Recall | F1 | False-alarm rate | Mean lead (true alerts) | Mean lead, seconds | Median lead, seconds | Still-running blocks: F1 |
+|---|---|---|---|---|---|---|---|---|
+| 3 | 0.1834 | 0.1966 | 0.1898 | 2.64% | 0.067 | 1,734 s | 0 s | 0.0197 |
+| 5 | 0.8833 | 0.3671 | 0.5186 | 0.15% | 0.012 | 283 s | 0 s | 0.0160 |
+| 10 | 0.8812 | 0.3979 | 0.5483 | 0.16% | 0.049 | 1,592 s | 0 s | 0.0980 |
+| 20 | 0.8490 | 0.5722 | 0.6836 | 0.31% | 0.124 | 5,165 s (1.4 h) | 0 s | 0.5996 |
 
 The precision-vs-lead-time Pareto front is k = 5, 10 and 20. The best trade-off is **k = 20**, for all test blocks and for still-running ones.
 
-At k ≤ 10, most correct alerts are short blocks that had already ended (1,826 of 1,854 at k = 5). Measured on blocks still running when the alert fires, only k = 20 warns early in practice: precision 0.6961, recall 0.5266, mean lead 0.339.
+At k ≤ 10, most correct alerts are short blocks that had already ended (1,826 of 1,854 at k = 5). Measured on blocks still running when the alert fires, only k = 20 warns early in practice: precision 0.6961, recall 0.5266, mean lead 0.339 of the block, median 2.9 h before the block's last line.
 
 ### 3.8 Real-Time Streaming Layer (`streaming/`, `stream_api.py`, `docker-compose.yml`)
 - **Broker:** a single Kafka broker in KRaft mode with three topics: `logs.raw`, `alerts` and `storage.decisions`.
@@ -156,7 +156,7 @@ At k ≤ 10, most correct alerts are short blocks that had already ended (1,826 
   - A status document is upserted every 2 s and served by `GET /api/stream/status`.
   - An early warning's lead time is written back onto its alert once the block finishes.
 - **Limitations:**
-  - HDFS has no "block finished" event, so completion means a timeout.
+  - HDFS has no "block finished" event, so completion means a timeout. In the 1,000,000-line verification replay, 34,321 of 36,279 timed-out blocks had more lines later, and whole-block verdicts on those partial blocks were mostly false (precision 0.145). On truly complete blocks precision was 0.986 and the false-alarm rate 1.39%. Early warning stayed precise in both cases (0.92 to 0.96). See `docs/streaming_guide.md` and `data/evaluation/stream_run_report.json`.
   - Per-block state is in memory, so it does not survive a restart.
 
 ### 3.9 OpenStack Source (`parser/openstack_parser.py`, `multi_source/`)
