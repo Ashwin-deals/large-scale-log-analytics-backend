@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-12T12:42:05+0530",
+  "generated_at": "2026-11-13T01:25:21+0530",
   "model": {
     "kind": "tune_half_refit",
     "model_path": "data/storage/django/isolation_forest_tune_half.pkl",
@@ -8,16 +8,16 @@
   },
   "policy": {
     "weights": {
-      "anomaly_score": 0.7151458211024135,
-      "event_frequency": 0.25955688943844707,
-      "block_size": 0.025297289459139376
+      "anomaly_score": 0.6049810515218956,
+      "event_frequency": 0.35648316808361286,
+      "block_size": 0.03853578039449157
     },
     "error_weight": 0.2,
     "thresholds": {
-      "hot": 0.3719397439939271,
-      "warm": 0.14301671331152532
+      "hot": 0.4111500659136029,
+      "warm": 0.25671087590594643
     },
-    "summary_fraction": 0.012138002128651453
+    "summary_fraction": 0.18796267062095026
   },
   "normalizer": {
     "score_min": -0.09461038298521668,
@@ -1031,6 +1031,7 @@
   "retention_target": 0.95,
   "penalty_weight": 1000.0,
   "warm_credit": 0.5,
+  "warm_ref_fraction": 0.25,
   "split": {
     "test_size": 0.5,
     "seed": 42
