@@ -452,6 +452,9 @@ def dashboard():
             )
             text = f"Models **refitted** on rebuilt features ({entry['metric']}: {changed})"
             kind = "refit"
+        elif entry.get("event") == "rollback":
+            text = f"Model **rolled back** by hand from V{entry['from_version']} to V{entry['to_version']}"
+            kind = "rollback"
         elif entry["promoted"]:
             text = (
                 f"Candidate **promoted** to V{entry['new_version']} ({entry['metric']}: "
@@ -667,6 +670,16 @@ def _timeline_from_history(history: list[dict]) -> list[dict]:
                     "desc": changes or "Refitted against the current feature encoding.",
                 }
             )
+        elif entry.get("event") == "rollback":
+            # A human override of promote-if-better.
+            timeline.append(
+                {
+                    "tone": "warning",
+                    "title": f"Rolled back by hand: V{entry['from_version']} -> V{entry['to_version']}",
+                    "meta": entry["timestamp"],
+                    "desc": entry.get("reason") or "Manual rollback.",
+                }
+            )
         elif entry["promoted"]:
             timeline.append(
                 {
@@ -702,8 +715,12 @@ def models():
     history = _read_json(DEFAULT_VERSION_HISTORY_PATH) or []
     ga_best_config = _read_json(GA_BEST_CONFIG_PATH)
 
+    # Every version ever issued, not just up to the live one: after a rollback
+    # (V3 -> V2) the newer version still exists and should show as rolled back.
+    issued = [current["version"]] + [int(e["new_version"]) for e in history if e.get("new_version")]
+    rolled_back = {int(e["from_version"]) for e in history if e.get("event") == "rollback"}
     version_rows = []
-    for version in range(1, current["version"] + 1):
+    for version in range(1, max(issued) + 1):
         metrics_path = DEFAULT_CURRENT_METRICS_PATH if version == 1 else EVALUATION_DIR / f"isolation_forest_v{version}_metrics.json"
         metrics = _read_json(metrics_path) or {}
         promoted_at = None
@@ -716,7 +733,11 @@ def models():
                 "accuracy_pct": _clean_float(metrics.get("accuracy", 0) * 100),
                 "f1": _clean_float(metrics.get("f1")),
                 "promoted_at": promoted_at,
-                "status": "active" if version == current["version"] else "retired",
+                "status": (
+                    "active" if version == current["version"]
+                    else "rolled_back" if version in rolled_back and version > current["version"]
+                    else "retired"
+                ),
             }
         )
 

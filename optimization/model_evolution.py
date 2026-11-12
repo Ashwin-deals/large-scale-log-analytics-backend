@@ -79,6 +79,73 @@ def _write_current_version(
         )
 
 
+def _read_version_history(version_history_path: Path) -> list[dict]:
+    if not version_history_path.exists():
+        return []
+    with version_history_path.open("r", encoding="utf-8") as history_file:
+        return json.load(history_file)
+
+
+def _next_version(current_version: int, models_dir: Path, version_history_path: Path) -> int:
+    """One past the highest version ever issued -- not current + 1. After a
+    rollback (say V3 -> V2) current + 1 would hand out V3 again and overwrite
+    the rolled-back model and its metrics, and history would carry two
+    different V3s."""
+    issued = [current_version]
+    issued += [int(e["new_version"]) for e in _read_version_history(version_history_path) if e.get("new_version")]
+    for path in models_dir.glob("isolation_forest_v*.pkl"):
+        suffix = path.stem.removeprefix("isolation_forest_v")
+        if suffix.isdigit():
+            issued.append(int(suffix))
+    return max(issued) + 1
+
+
+def record_rollback(
+    to_version: int,
+    reason: str,
+    models_dir: str | Path = DEFAULT_MODELS_DIR,
+    evaluation_dir: str | Path = DEFAULT_EVALUATION_DIR,
+    current_version_path: str | Path = DEFAULT_CURRENT_VERSION_PATH,
+    version_history_path: str | Path = DEFAULT_VERSION_HISTORY_PATH,
+    metric: str = "f1",
+    timestamp: str | None = None,
+    update_current: bool = True,
+    extra: dict | None = None,
+    from_version: int | None = None,
+) -> dict:
+    """A human override of promote-if-better: point the deployment back at an
+    earlier version and log it, so the history never jumps between versions
+    with nothing in between. `update_current=False` only writes the history
+    entry (for backfilling a rollback that was already applied by hand); pass
+    `from_version` then, since current_version.json already shows the target."""
+    models_dir, evaluation_dir = Path(models_dir), Path(evaluation_dir)
+    current_version_path, version_history_path = Path(current_version_path), Path(version_history_path)
+    if from_version is None:
+        from_version = _load_current_version(current_version_path)
+    model_path = models_dir / f"isolation_forest_v{to_version}.pkl"
+    metrics_path = evaluation_dir / f"isolation_forest_v{to_version}_metrics.json"
+    if not model_path.exists():
+        raise FileNotFoundError(f"No model for V{to_version} at {model_path}")
+    timestamp = timestamp or datetime.now(timezone.utc).isoformat()
+    metric_value = _load_metric(metrics_path, metric) if metrics_path.exists() else None
+
+    if update_current:
+        _write_current_version(current_version_path, to_version, model_path, metrics_path, metric, metric_value, timestamp)
+    entry = {
+        "timestamp": timestamp,
+        "event": "rollback",
+        "metric": metric,
+        "promoted": False,
+        "from_version": from_version,
+        "to_version": to_version,
+        "to_metric_value": metric_value,
+        "reason": reason,
+        **(extra or {}),
+    }
+    _append_version_history(version_history_path, entry)
+    return entry
+
+
 def _append_version_history(version_history_path: Path, entry: dict) -> None:
     history = []
     if version_history_path.exists():
@@ -143,7 +210,7 @@ def evaluate_and_promote(
     }
 
     if promoted:
-        new_version = current_version + 1
+        new_version = _next_version(current_version, models_dir, version_history_path)
         new_model_path = models_dir / f"isolation_forest_v{new_version}.pkl"
         new_metrics_path = evaluation_dir / f"isolation_forest_v{new_version}_metrics.json"
 

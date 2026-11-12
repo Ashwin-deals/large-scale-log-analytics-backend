@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from optimization.model_evolution import evaluate_and_promote
+from optimization.model_evolution import evaluate_and_promote, record_rollback
 
 
 class ModelEvolutionTest(unittest.TestCase):
@@ -69,6 +69,70 @@ class ModelEvolutionTest(unittest.TestCase):
             self.assertTrue(history[0]["promoted"])
             self.assertFalse(history[1]["promoted"])
             self.assertEqual(history[1]["current_version"], 2)
+
+    def test_rollback_points_back_and_is_logged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._build_paths(directory)
+            self._write_model(paths["current_model"])
+            self._write_model(paths["candidate_model"])
+            self._write_metrics(paths["current_metrics"], f1=0.20)
+            self._write_metrics(paths["candidate_metrics"], f1=0.70)
+            self._evaluate_and_promote(paths)  # V2
+            self._write_model(paths["models_dir"] / "isolation_forest_v1.pkl")
+            self._write_metrics(paths["evaluation_dir"] / "isolation_forest_v1_metrics.json", f1=0.20)
+
+            entry = record_rollback(1, "keep review numbers stable", **self._rollback_paths(paths))
+
+            current = json.loads(paths["current_version_path"].read_text())
+            self.assertEqual(current["version"], 1)
+            self.assertEqual((entry["event"], entry["from_version"], entry["to_version"]), ("rollback", 2, 1))
+            self.assertEqual(entry["to_metric_value"], 0.20)
+            history = self._read_history(paths["version_history_path"])
+            self.assertEqual(history[-1]["reason"], "keep review numbers stable")
+
+    def test_backfilled_rollback_leaves_the_deployment_alone(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._build_paths(directory)
+            self._write_model(paths["models_dir"] / "isolation_forest_v1.pkl")
+            paths["current_version_path"].write_text(json.dumps({"version": 1, "model_path": "x"}))
+            entry = record_rollback(1, "backfill", timestamp="2026-09-09T04:40:48+00:00", update_current=False,
+                                    from_version=2, **self._rollback_paths(paths))
+            self.assertEqual((entry["from_version"], entry["to_version"]), (2, 1))
+            self.assertEqual(json.loads(paths["current_version_path"].read_text())["model_path"], "x")
+            self.assertEqual(self._read_history(paths["version_history_path"])[0]["timestamp"], "2026-09-09T04:40:48+00:00")
+
+    def test_rollback_to_a_missing_version_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._build_paths(directory)
+            with self.assertRaises(FileNotFoundError):
+                record_rollback(7, "no such model", **self._rollback_paths(paths))
+
+    def test_promotion_after_rollback_never_reuses_a_version_number(self):
+        # V2 promoted, rolled back to V1, then a new candidate wins: it must
+        # become V3, leaving the rolled-back V2 model and metrics untouched.
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._build_paths(directory)
+            self._write_model(paths["current_model"])
+            self._write_model(paths["candidate_model"])
+            self._write_metrics(paths["current_metrics"], f1=0.20)
+            self._write_metrics(paths["candidate_metrics"], f1=0.70)
+            self._evaluate_and_promote(paths)
+            v2_model = paths["models_dir"] / "isolation_forest_v2.pkl"
+            v2_model.write_bytes(b"the-rolled-back-v2")
+            self._write_model(paths["models_dir"] / "isolation_forest_v1.pkl")
+            self._write_metrics(paths["evaluation_dir"] / "isolation_forest_v1_metrics.json", f1=0.20)
+            record_rollback(1, "manual", **self._rollback_paths(paths))
+
+            paths["candidate_model"].write_bytes(b"a-newer-candidate")
+            self._write_metrics(paths["candidate_metrics"], f1=0.80)
+            decision = self._evaluate_and_promote(paths)
+
+            self.assertEqual(decision["new_version"], 3)
+            self.assertEqual(v2_model.read_bytes(), b"the-rolled-back-v2")
+            self.assertEqual(json.loads(paths["current_version_path"].read_text())["version"], 3)
+
+    def _rollback_paths(self, paths: dict) -> dict:
+        return {k: paths[k] for k in ("models_dir", "evaluation_dir", "current_version_path", "version_history_path")}
 
     def _evaluate_and_promote(self, paths: dict) -> dict:
         return evaluate_and_promote(
