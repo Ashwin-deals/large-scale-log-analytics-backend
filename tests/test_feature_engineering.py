@@ -18,6 +18,21 @@ class HDFSDataCleanerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             HDFSDataCleaner().clean(frame, self._temp_output_path("cleaned.csv"))
 
+    def test_cleaner_can_keep_exact_duplicates(self):
+        # Sources whose identical lines are real repeats (Apache bursts) keep them.
+        with tempfile.TemporaryDirectory() as directory:
+            structured = self._structured_logs()
+            kept = HDFSDataCleaner(drop_duplicates=False).clean(structured, Path(directory) / "kept.csv")
+            dropped = HDFSDataCleaner().clean(structured, Path(directory) / "dropped.csv")
+            self.assertGreater(len(kept), len(dropped))
+            self.assertEqual(len(dropped), 2)
+
+    def test_source_dedupe_settings(self):
+        from multi_source.sources import get_source
+
+        self.assertFalse(get_source("apache").dedupe)
+        self.assertTrue(get_source("cloudtrail").dedupe)
+
     def test_cleaner_removes_duplicates_and_coerces_types(self):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "hdfs_cleaned.csv"

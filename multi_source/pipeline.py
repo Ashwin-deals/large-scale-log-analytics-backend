@@ -117,7 +117,7 @@ def ingest(config: SourceConfig, paths: Paths) -> dict:
 
     parser = config.parser_factory()
     stats = {"input_files": [str(f) for f in files], "lines_or_records": 0, "unparsed": 0, "no_block_id": 0}
-    cleaner, extractor = HDFSDataCleaner(), HDFSFeatureExtractor()
+    cleaner, extractor = HDFSDataCleaner(drop_duplicates=config.dedupe), HDFSFeatureExtractor()
     weak = label_rules.CloudTrailWeakLabeler() if config.name == "cloudtrail" else None
     tmp_cleaned, tmp_features = paths.processed / "_chunk_cleaned.csv", paths.processed / "_chunk_features.csv"
 

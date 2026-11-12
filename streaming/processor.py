@@ -88,6 +88,12 @@ class StreamProcessor:
         self.event_type_names = self.encoder.event_type_names()
         self.source = source
         self.parser = parser or HDFSParser()
+        if source == "hdfs":
+            self.dedupe = True
+        else:
+            from multi_source.sources import get_source
+
+            self.dedupe = get_source(source).dedupe
         self.clock = clock
 
         self.blocks: dict[str, BlockState] = {}
@@ -124,7 +130,7 @@ class StreamProcessor:
                 continue
             state = self.blocks.get(block_id)
             if state is None:
-                state = self.blocks[block_id] = BlockState(block_id)
+                state = self.blocks[block_id] = BlockState(block_id, dedupe=self.dedupe)
             if not state.add(event, self.encoder):
                 self.counts["duplicate_lines"] += 1
                 continue
