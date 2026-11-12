@@ -20,6 +20,7 @@ Writes:
 Usage:
     python3 scripts/optimize_storage_policy.py
     python3 scripts/optimize_storage_policy.py --warm-credit 0.3 --retention-target 0.9
+    python3 scripts/optimize_storage_policy.py --warm-ref-fraction 0.5
 """
 
 import argparse
@@ -44,7 +45,7 @@ from smart_storage.data import (
     score_blocks,
 )
 from smart_storage.optimizer import DEFAULT_TEST_SIZE, RANDOM_STATE, ScoringVariant, build_report, run_ga, stratified_split
-from smart_storage.policy import PENALTY_WEIGHT, RETENTION_TARGET, WARM_CREDIT, BlockTable, Normalizer
+from smart_storage.policy import PENALTY_WEIGHT, RETENTION_TARGET, WARM_CREDIT, WARM_REF_FRACTION, BlockTable, Normalizer
 
 
 def parse_args():
@@ -52,7 +53,10 @@ def parse_args():
     parser.add_argument("--retention-target", type=float, default=RETENTION_TARGET,
                         help="minimum weighted anomaly retention (default %(default)s)")
     parser.add_argument("--warm-credit", type=float, default=WARM_CREDIT,
-                        help="retention credit for an anomaly kept as a WARM summary; HOT = 1, COLD = 0 (default %(default)s)")
+                        help="most retention credit an anomaly kept as a WARM summary can earn; HOT = 1, COLD = 0 (default %(default)s)")
+    parser.add_argument("--warm-ref-fraction", type=float, default=WARM_REF_FRACTION,
+                        help="share of a block a WARM summary must keep to earn the full warm credit; "
+                             "thinner summaries earn proportionally less (default %(default)s)")
     parser.add_argument("--penalty-weight", type=float, default=PENALTY_WEIGHT)
     parser.add_argument("--test-size", type=float, default=DEFAULT_TEST_SIZE)
     parser.add_argument("--seed", type=int, default=RANDOM_STATE)
@@ -72,7 +76,7 @@ def tune_variant(name, frame, tune_idx, holdout_idx, model_info, args) -> Scorin
     holdout_table = BlockTable.from_frame(holdout_frame, normalizer)
 
     print(f"\nGA [{name}]: population {args.population}, {args.generations} generations, "
-          f"target {args.retention_target}, warm credit {args.warm_credit}")
+          f"target {args.retention_target}, warm credit {args.warm_credit} at f_ref {args.warm_ref_fraction}")
     _, ga_result = run_ga(
         tune_table,
         population_size=args.population,
@@ -82,6 +86,7 @@ def tune_variant(name, frame, tune_idx, holdout_idx, model_info, args) -> Scorin
         penalty_weight=args.penalty_weight,
         random_seed=args.seed,
         warm_credit=args.warm_credit,
+        warm_ref_fraction=args.warm_ref_fraction,
     )
     print(f"  done in {ga_result.wall_clock_seconds:.1f}s")
     return ScoringVariant(model_info, normalizer, tune_table, holdout_table, ga_result)
@@ -99,6 +104,11 @@ def print_section(title: str, section: dict):
         print(f"  WARM: {warm['mean_lines_per_warm_block']:.2f} lines/block kept from a mean of "
               f"{warm['mean_event_frequency_of_warm_blocks']:.1f}; "
               f"{warm['share_of_warm_blocks_kept_at_one_line']:.1%} of WARM blocks keep only 1 line (the COLD cost)")
+        if warm.get("mean_credit_per_warm_anomaly") is not None:
+            print(f"  WARM credit earned per anomaly: {warm['mean_credit_per_warm_anomaly']:.3f} "
+                  f"(max {warm['warm_credit_max']}, full at f_ref {warm['warm_ref_fraction']})")
+    print(f"  holdout retention  full={holdout['full_retention']:.4f}  weighted={holdout['weighted_retention']:.4f}  "
+          f"coverage={holdout['coverage']:.4f}  saved={holdout['storage_saved_pct']:.2f}%")
 
 
 def print_table(report: dict):
@@ -151,7 +161,7 @@ def main():
 
     policy_payload, report = build_report(
         clean, in_sample, args.retention_target, args.penalty_weight, args.test_size, args.seed,
-        args.warm_credit, args.random_trials,
+        args.warm_credit, args.random_trials, args.warm_ref_fraction,
     )
     POLICY_PATH.write_text(json.dumps(policy_payload, indent=2), encoding="utf-8")
     REPORT_PATH.write_text(json.dumps(report, indent=2), encoding="utf-8")

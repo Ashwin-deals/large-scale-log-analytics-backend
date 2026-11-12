@@ -24,6 +24,7 @@ from smart_storage.optimizer import stratified_split
 from smart_storage.policy import (
     PENALTY_WEIGHT,
     WARM_CREDIT,
+    WARM_REF_FRACTION,
     WEIGHT_NAMES,
     BlockTable,
     Normalizer,
@@ -179,7 +180,8 @@ def simulate():
 
         {"weights": {"anomaly_score": 0.8, "event_frequency": 0.1, "block_size": 0.1},
          "t_hot": 0.14, "t_warm": 0.10, "summary_fraction": 0.05,
-         "retention_target": 0.95, "warm_credit": 0.5, "split": "holdout" | "tune" | "all"}
+         "retention_target": 0.95, "warm_credit": 0.5, "warm_ref_fraction": 0.25,
+         "split": "holdout" | "tune" | "all"}
     """
     body = request.get_json(silent=True)
     if body is None:
@@ -198,9 +200,12 @@ def simulate():
     warm_credit = _number(body, "warm_credit", policy_payload.get("warm_credit", WARM_CREDIT))
     if not 0.0 <= warm_credit <= 1.0:
         raise BadRequest("warm_credit must be between 0 and 1")
+    warm_ref_fraction = _number(body, "warm_ref_fraction", policy_payload.get("warm_ref_fraction", WARM_REF_FRACTION))
+    if not 0.0 < warm_ref_fraction <= 1.0:
+        raise BadRequest("warm_ref_fraction must be greater than 0 and at most 1")
 
     policy = _apply_overrides(StoragePolicy.from_dict(policy_payload["policy"]), body)
-    outcome = evaluate_policy(_get_tables(policy_payload)[split], policy, warm_credit)
+    outcome = evaluate_policy(_get_tables(policy_payload)[split], policy, warm_credit, warm_ref_fraction)
 
     return jsonify(
         {
@@ -208,6 +213,7 @@ def simulate():
             "policy": policy.to_dict(),
             "retention_target": target,
             "warm_credit": warm_credit,
+            "warm_ref_fraction": warm_ref_fraction,
             "meets_retention_target": outcome.meets_target(target),
             "fitness": outcome.fitness(target, policy_payload.get("penalty_weight", PENALTY_WEIGHT)),
             "outcome": outcome.to_dict(),

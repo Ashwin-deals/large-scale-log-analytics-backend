@@ -37,6 +37,7 @@ from .policy import (
     PENALTY_WEIGHT,
     RETENTION_TARGET,
     WARM_CREDIT,
+    WARM_REF_FRACTION,
     BlockTable,
     Normalizer,
     StorageOutcome,
@@ -46,6 +47,7 @@ from .policy import (
     evaluate_policy,
     importance,
     penalized_fitness,
+    summary_lines,
 )
 
 RANDOM_STATE = 42
@@ -119,9 +121,10 @@ class GARunResult:
         }
 
 
-def make_fitness_func(table: BlockTable, retention_target: float, penalty_weight: float, warm_credit: float = WARM_CREDIT):
+def make_fitness_func(table: BlockTable, retention_target: float, penalty_weight: float, warm_credit: float = WARM_CREDIT,
+                      warm_ref_fraction: float = WARM_REF_FRACTION):
     def fitness_func(ga_instance, solution, solution_idx):
-        outcome = evaluate_policy(table, decode_policy(solution), warm_credit)
+        outcome = evaluate_policy(table, decode_policy(solution), warm_credit, warm_ref_fraction)
         return penalized_fitness(outcome.storage_saved_pct, outcome.weighted_retention, retention_target, penalty_weight)
 
     return fitness_func
@@ -137,6 +140,7 @@ def run_ga(
     random_seed: int = RANDOM_STATE,
     verbose: bool = True,
     warm_credit: float = WARM_CREDIT,
+    warm_ref_fraction: float = WARM_REF_FRACTION,
 ) -> tuple[pygad.GA, GARunResult]:
     history = GARunResult(
         best_policy=None, best_fitness=0.0, generations_completed=0,
@@ -150,7 +154,7 @@ def run_ga(
         generation_start["t"] = now
 
         solution, fitness, _ = ga_instance.best_solution()
-        outcome = evaluate_policy(table, decode_policy(solution), warm_credit)
+        outcome = evaluate_policy(table, decode_policy(solution), warm_credit, warm_ref_fraction)
         history.best_fitness_per_generation.append(float(fitness))
         history.best_saved_pct_per_generation.append(outcome.storage_saved_pct)
         history.best_weighted_retention_per_generation.append(outcome.weighted_retention)
@@ -171,7 +175,7 @@ def run_ga(
         num_genes=len(GENE_NAMES),
         gene_space=copy.deepcopy(GENE_SPACE),
         gene_type=copy.deepcopy(GENE_TYPE),
-        fitness_func=make_fitness_func(table, retention_target, penalty_weight, warm_credit),
+        fitness_func=make_fitness_func(table, retention_target, penalty_weight, warm_credit, warm_ref_fraction),
         parent_selection_type="sss",
         crossover_type="single_point",
         mutation_type="random",
@@ -255,10 +259,11 @@ def compare_to_baselines(
     return results
 
 
-def warm_tier_diagnostics(table: BlockTable, policy: StoragePolicy, warm_credit: float) -> dict:
+def warm_tier_diagnostics(table: BlockTable, policy: StoragePolicy, warm_credit: float,
+                          warm_ref_fraction: float = WARM_REF_FRACTION) -> dict:
     """What the WARM tier actually costs and earns under a policy -- the numbers
     behind "is WARM a real tier or has it collapsed?"."""
-    outcome = evaluate_policy(table, policy, warm_credit)
+    outcome = evaluate_policy(table, policy, warm_credit, warm_ref_fraction)
     warm_blocks = outcome.tier_counts["WARM"]
     warm_ef = table.event_frequency[assign_tiers(importance(table, policy), policy) == WARM]
     return {
@@ -267,9 +272,19 @@ def warm_tier_diagnostics(table: BlockTable, policy: StoragePolicy, warm_credit:
         "warm_anomalies": outcome.tier_anomalies["WARM"],
         "mean_lines_per_warm_block": outcome.tier_lines["WARM"] / warm_blocks if warm_blocks else None,
         "mean_event_frequency_of_warm_blocks": float(warm_ef.mean()) if warm_blocks else None,
+        # A WARM block whose summary rounds to zero lines costs and earns exactly what COLD does.
         "share_of_warm_blocks_kept_at_one_line": (
-            float((np.maximum(1, np.rint(policy.summary_fraction * warm_ef)) == 1).mean()) if warm_blocks else None
+            float((summary_lines(warm_ef, policy.summary_fraction) == 0).mean()) if warm_blocks else None
         ),
+        "mean_summary_lines_per_warm_block": (
+            float(summary_lines(warm_ef, policy.summary_fraction).mean()) if warm_blocks else None
+        ),
+        "mean_share_of_block_kept": (
+            float((summary_lines(warm_ef, policy.summary_fraction) / warm_ef).mean()) if warm_blocks else None
+        ),
+        "warm_credit_max": warm_credit,
+        "warm_ref_fraction": warm_ref_fraction,
+        "mean_credit_per_warm_anomaly": outcome.warm_credit_earned if outcome.tier_anomalies["WARM"] else None,
         "summary_fraction": policy.summary_fraction,
         "cold_line_cost": 1,
     }
@@ -292,10 +307,10 @@ class ScoringVariant:
 
 
 def variant_section(variant: ScoringVariant, retention_target: float, penalty_weight: float, warm_credit: float,
-                    n_random_trials: int, seed: int) -> dict:
+                    n_random_trials: int, seed: int, warm_ref_fraction: float = WARM_REF_FRACTION) -> dict:
     policy = variant.policy
-    tune_outcome = evaluate_policy(variant.tune_table, policy, warm_credit)
-    holdout_outcome = evaluate_policy(variant.holdout_table, policy, warm_credit)
+    tune_outcome = evaluate_policy(variant.tune_table, policy, warm_credit, warm_ref_fraction)
+    holdout_outcome = evaluate_policy(variant.holdout_table, policy, warm_credit, warm_ref_fraction)
     comparison = compare_to_baselines(
         variant.tune_table, variant.holdout_table, holdout_outcome, retention_target, penalty_weight, n_random_trials, seed
     )
@@ -305,7 +320,7 @@ def variant_section(variant: ScoringVariant, retention_target: float, penalty_we
         "policy": policy.to_dict(),
         "tuning": _outcome_entry(tune_outcome, retention_target, penalty_weight),
         "holdout": _outcome_entry(holdout_outcome, retention_target, penalty_weight),
-        "warm_tier": warm_tier_diagnostics(variant.holdout_table, policy, warm_credit),
+        "warm_tier": warm_tier_diagnostics(variant.holdout_table, policy, warm_credit, warm_ref_fraction),
         "baselines": comparison,
         "ga_beats_baselines": all(r["ga_better"] for r in compared.values()),
         "ga_history": variant.ga_result.history_dict(),
@@ -338,6 +353,7 @@ def build_report(
     seed: int,
     warm_credit: float = WARM_CREDIT,
     n_random_trials: int = 20,
+    warm_ref_fraction: float = WARM_REF_FRACTION,
 ) -> tuple[dict, dict]:
     """Returns (policy_best.json payload, storage_report.json payload).
 
@@ -345,7 +361,7 @@ def build_report(
     policy is the one saved and served. `comparison` is the same protocol on
     the deployed model's scores, kept for the side-by-side column."""
     generated_at = time.strftime("%Y-%m-%dT%H:%M:%S%z")
-    section = lambda v: variant_section(v, retention_target, penalty_weight, warm_credit, n_random_trials, seed)
+    section = lambda v: variant_section(v, retention_target, penalty_weight, warm_credit, n_random_trials, seed, warm_ref_fraction)
     primary_section = section(primary)
 
     policy_payload = {
@@ -356,6 +372,7 @@ def build_report(
         "retention_target": retention_target,
         "penalty_weight": penalty_weight,
         "warm_credit": warm_credit,
+        "warm_ref_fraction": warm_ref_fraction,
         "split": {"test_size": test_size, "seed": seed},
     }
     report_payload = {
@@ -364,12 +381,13 @@ def build_report(
             "retention_target": retention_target,
             "penalty_weight": penalty_weight,
             "warm_credit": warm_credit,
+            "warm_ref_fraction": warm_ref_fraction,
             "error_weight": ERROR_WEIGHT,
             "test_size": test_size,
             "seed": seed,
             "anomaly_definition": "ground-truth label (anomaly_label.csv); flagged_retention reports the model's own Anomaly calls",
             "retention_definitions": {
-                "weighted_retention": "(HOT + warm_credit * WARM anomalies) / all anomalies -- used by fitness and the target",
+                "weighted_retention": "(HOT anomalies + sum over WARM anomalies of warm_credit * min(1, lines_kept / (warm_ref_fraction * lines))) / all anomalies -- used by fitness and the target",
                 "full_retention": "HOT anomalies / all anomalies",
                 "coverage": "(HOT + WARM anomalies) / all anomalies",
             },

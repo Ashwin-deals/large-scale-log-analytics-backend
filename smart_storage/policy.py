@@ -20,8 +20,12 @@ share no matter how the tuned weights fall.
 Tiers and cost
 --------------
   HOT   importance >= t_hot                 keep every line      (event_frequency)
-  WARM  t_warm <= importance < t_hot        keep a summary       (max(1, round(f * event_frequency)))
+  WARM  t_warm <= importance < t_hot        metadata + summary   (1 + round(f * event_frequency))
   COLD  importance < t_warm                 drop, keep metadata  (1 line)
+
+A WARM block keeps the same metadata line as COLD plus round(f * lines)
+summary lines, so WARM can never cost less than COLD and a summary that
+rounds to zero lines is just COLD.
 
 Storage cost is lines kept, using event_frequency as lines per block.
 
@@ -31,12 +35,27 @@ Three numbers, all over ground-truth anomalies:
 
   full_retention      HOT anomalies / all anomalies
   coverage            (HOT + WARM) anomalies / all anomalies
-  weighted_retention  (HOT + warm_credit * WARM) / all -- what fitness and the
-                      retention target use; a WARM summary is worth part of a
-                      fully kept block (warm_credit, default WARM_CREDIT)
+  weighted_retention  (HOT + sum of WARM credits) / all -- what fitness and
+                      the retention target use
+
+WARM credit is proportional to how much of the block the summary keeps:
+
+    credit = warm_credit * min(1, summary_lines / (warm_ref_fraction * event_frequency))
+
+A summary that keeps at least warm_ref_fraction (default WARM_REF_FRACTION =
+0.25) of the block earns the full warm_credit; a thinner one earns
+proportionally less.
+
+Why both rules: previously WARM cost max(1, round(f * lines)) and every WARM
+anomaly earned a flat warm_credit. A 1-line "summary" then cost exactly what
+COLD costs but still earned credit, so the optimizer emptied COLD into a WARM
+tier that kept one line per block (the "WARM tier collapse"). Proportional
+credit alone does not stop that -- the 1-line floor still hands out free
+credit -- so the metadata line is now charged separately and credit is paid
+only for summary lines bought on top of it.
 
 warm_credit = 0 makes weighted_retention equal full_retention; warm_credit = 1
-makes it equal coverage.
+with summaries at or above the reference fraction makes it equal coverage.
 """
 
 from __future__ import annotations
@@ -52,6 +71,9 @@ WEIGHT_NAMES = ("anomaly_score", "event_frequency", "block_size")
 ERROR_WEIGHT = 0.2
 RETENTION_TARGET = 0.95
 WARM_CREDIT = 0.5
+# Share of a block's lines a WARM summary must keep to earn the full
+# warm_credit; thinner summaries earn proportionally less.
+WARM_REF_FRACTION = 0.25
 # Fitness points lost per unit (0..1) of anomaly-retention shortfall. Savings
 # live on a 0..100 scale, so 1000 means missing the target by one percentage
 # point costs ten points of savings -- steep enough that an infeasible policy
@@ -245,11 +267,13 @@ class StorageOutcome:
     total_lines: int
     kept_lines: int
     storage_saved_pct: float
-    weighted_retention: float  # HOT = 1, WARM = warm_credit, COLD = 0; used by fitness
+    weighted_retention: float  # HOT = 1, WARM = proportional credit (<= warm_credit), COLD = 0; used by fitness
     full_retention: float  # HOT anomalies only
     coverage: float  # HOT + WARM anomalies
     flagged_retention: float  # HOT share of the model's own Anomaly calls
-    warm_credit: float
+    warm_credit: float  # the most a WARM anomaly can earn
+    warm_ref_fraction: float  # summary share that earns the full warm_credit
+    warm_credit_earned: float  # mean credit actually earned per WARM anomaly (0 if none)
     tier_counts: dict
     tier_lines: dict
     tier_anomalies: dict
@@ -272,6 +296,8 @@ class StorageOutcome:
             "coverage": self.coverage,
             "flagged_retention": self.flagged_retention,
             "warm_credit": self.warm_credit,
+            "warm_ref_fraction": self.warm_ref_fraction,
+            "warm_credit_earned": self.warm_credit_earned,
             "tier_counts": self.tier_counts,
             "tier_lines": self.tier_lines,
             "tier_anomalies": self.tier_anomalies,
@@ -282,7 +308,16 @@ def _ratio(numerator: float, denominator: int) -> float:
     return float(numerator / denominator) if denominator else 1.0
 
 
-def _outcome(table: BlockTable, hot: np.ndarray, warm: np.ndarray, warm_lines: int, warm_credit: float) -> StorageOutcome:
+def _outcome(
+    table: BlockTable,
+    hot: np.ndarray,
+    warm: np.ndarray,
+    warm_lines: int,
+    warm_anomaly_credit: float,
+    warm_credit: float,
+    warm_ref_fraction: float,
+) -> StorageOutcome:
+    """warm_anomaly_credit is the summed retention credit of the WARM anomalies."""
     cold = ~(hot | warm)
     tier_lines = {
         "HOT": int(table.event_frequency[hot].sum()),
@@ -303,23 +338,44 @@ def _outcome(table: BlockTable, hot: np.ndarray, warm: np.ndarray, warm_lines: i
         total_lines=total_lines,
         kept_lines=kept_lines,
         storage_saved_pct=100.0 * (1.0 - kept_lines / total_lines) if total_lines else 0.0,
-        weighted_retention=_ratio(tier_anomalies["HOT"] + warm_credit * tier_anomalies["WARM"], n_anomalies),
+        weighted_retention=_ratio(tier_anomalies["HOT"] + warm_anomaly_credit, n_anomalies),
         full_retention=_ratio(tier_anomalies["HOT"], n_anomalies),
         coverage=_ratio(tier_anomalies["HOT"] + tier_anomalies["WARM"], n_anomalies),
         flagged_retention=_ratio(int((hot & table.is_flagged).sum()), int(table.is_flagged.sum())),
         warm_credit=float(warm_credit),
+        warm_ref_fraction=float(warm_ref_fraction),
+        warm_credit_earned=float(warm_anomaly_credit / tier_anomalies["WARM"]) if tier_anomalies["WARM"] else 0.0,
         tier_counts={"HOT": int(hot.sum()), "WARM": int(warm.sum()), "COLD": int(cold.sum())},
         tier_lines=tier_lines,
         tier_anomalies=tier_anomalies,
     )
 
 
-def evaluate_policy(table: BlockTable, policy: StoragePolicy, warm_credit: float = WARM_CREDIT) -> StorageOutcome:
+def summary_lines(event_frequency, summary_fraction: float) -> np.ndarray:
+    """Summary lines a WARM block keeps on top of its metadata line: round(f * lines).
+    np.rint is round-half-even, the same as Python's round()."""
+    return np.rint(summary_fraction * np.asarray(event_frequency)).astype(np.int64)
+
+
+def warm_block_credit(event_frequency, summary, warm_credit: float = WARM_CREDIT,
+                      warm_ref_fraction: float = WARM_REF_FRACTION) -> np.ndarray:
+    """Retention credit per WARM block: warm_credit * min(1, summary / (ref * lines))."""
+    reference = warm_ref_fraction * np.asarray(event_frequency, dtype=float)
+    return warm_credit * np.minimum(1.0, np.asarray(summary, dtype=float) / reference)
+
+
+def evaluate_policy(table: BlockTable, policy: StoragePolicy, warm_credit: float = WARM_CREDIT,
+                    warm_ref_fraction: float = WARM_REF_FRACTION) -> StorageOutcome:
+    if not 0.0 < warm_ref_fraction <= 1.0:
+        raise ValueError("warm_ref_fraction must be in (0, 1]")
     tiers = assign_tiers(importance(table, policy), policy)
     hot, warm = tiers == HOT, tiers == WARM
-    # np.rint is round-half-even, the same as Python's round() in the spec.
-    warm_lines = np.maximum(1, np.rint(policy.summary_fraction * table.event_frequency[warm])).astype(np.int64)
-    return _outcome(table, hot, warm, int(warm_lines.sum()), warm_credit)
+    warm_ef = table.event_frequency[warm]
+    summary = summary_lines(warm_ef, policy.summary_fraction)
+    credit = warm_block_credit(warm_ef, summary, warm_credit, warm_ref_fraction)
+    warm_anomaly_credit = float(credit[table.is_anomaly[warm]].sum())
+    warm_lines = int(warm.sum()) + int(summary.sum())  # one metadata line each, plus the summaries
+    return _outcome(table, hot, warm, warm_lines, warm_anomaly_credit, warm_credit, warm_ref_fraction)
 
 
 def outcome_from_kept_mask(table: BlockTable, kept: np.ndarray) -> StorageOutcome:
@@ -327,4 +383,4 @@ def outcome_from_kept_mask(table: BlockTable, kept: np.ndarray) -> StorageOutcom
     line, the rest keep one metadata line -- the same accounting as COLD.
     With no WARM tier, all three retention numbers coincide."""
     kept = np.asarray(kept, dtype=bool)
-    return _outcome(table, kept, np.zeros(len(table), dtype=bool), 0, WARM_CREDIT)
+    return _outcome(table, kept, np.zeros(len(table), dtype=bool), 0, 0.0, WARM_CREDIT, WARM_REF_FRACTION)
