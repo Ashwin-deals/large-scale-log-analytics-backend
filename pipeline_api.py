@@ -596,28 +596,28 @@ def detections_summary():
     )
 
 
+def _filter_detections(predictions: pd.DataFrame) -> pd.DataFrame:
+    """?severity= and ?search= as the Detection Results page applies them."""
+    search = (request.args.get("search") or "").strip().lower()
+    severity = (request.args.get("severity") or "all").strip().lower()
+    filtered = predictions
+    if severity != "all":
+        filtered = filtered[filtered["severity"] == severity]
+    if search:
+        text = lambda col: filtered[col].astype("string").str.lower().str.contains(search, na=False, regex=False)
+        filtered = filtered[text("block_id") | text("component") | text("event_type") | text("source_ip")]
+    return filtered
+
+
 @pipeline_bp.get("/api/detections")
 @token_required
 def detections():
     ctx = request_context()
     predictions = get_current_predictions(ctx)
 
-    search = (request.args.get("search") or "").strip().lower()
-    severity = (request.args.get("severity") or "all").strip().lower()
     page = max(1, _int_arg("page", 1))
     limit = min(200, max(1, _int_arg("limit", 25)))
-
-    filtered = predictions
-    if severity != "all":
-        filtered = filtered[filtered["severity"] == severity]
-    if search:
-        mask = (
-            filtered["block_id"].str.lower().str.contains(search, na=False)
-            | filtered["component"].str.lower().str.contains(search, na=False)
-            | filtered["event_type"].str.lower().str.contains(search, na=False)
-            | filtered["source_ip"].str.lower().str.contains(search, na=False)
-        )
-        filtered = filtered[mask]
+    filtered = _filter_detections(predictions)
 
     filtered = filtered.sort_values("anomaly_score", ascending=False)
     total = len(filtered)
@@ -644,6 +644,21 @@ def detections():
     ]
 
     return jsonify({"items": items, "total": total, "page": page, "limit": limit, "source": _source_info(ctx)})
+
+
+@pipeline_bp.get("/api/detections/export")
+@token_required
+def detections_export():
+    """Every row the Detection Results page would list for these filters, as CSV."""
+    from flask import Response
+
+    ctx = request_context()
+    filtered = _filter_detections(get_current_predictions(ctx))
+    columns = ["block_id", "first_seen", "component", "event_type", "source_ip", "destination_ip",
+               "anomaly_score", "severity", "predicted_label", "true_label", "source"]
+    csv_text = filtered.sort_values("anomaly_score", ascending=False)[columns].to_csv(index=False)
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{ctx.name}_detections.csv"'})
 
 
 # ---------------------------------------------------------------------------
