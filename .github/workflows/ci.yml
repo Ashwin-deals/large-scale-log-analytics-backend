@@ -1,10 +1,10 @@
 name: Backend CI
 
+# Every push to any branch, and every pull request, so a branch is checked
+# before it is merged rather than after.
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   test:
@@ -24,20 +24,27 @@ jobs:
         run: python -m unittest discover tests
 
       - name: Import sanity check
-        # tests/ only covers feature_engineering, parser, and
-        # optimization.model_evolution (see what each test file imports).
-        # The Flask app modules below have no unit tests, so this at least
-        # catches import-time breakage (syntax errors, missing imports,
-        # circular imports) in the code that actually backs the API.
-        # app.py itself is excluded: it calls create_index() at import
-        # time, which needs a real, reachable MongoDB (see CLAUDE.md).
+        # Catches import-time breakage (syntax errors, missing or circular
+        # imports) in every module that backs the API or a pipeline, tested
+        # or not. app.py itself is excluded: it creates a MongoDB index at
+        # import time, which needs a reachable database. db.py only builds a
+        # lazy client, so importing it is safe offline.
         run: |
           python -c "
           import importlib
           modules = [
-              'auth', 'db', 'pipeline_api', 'sources_api',
+              'auth', 'db', 'pipeline_api', 'sources_api', 'storage_api', 'early_warning_api', 'stream_api',
+              'account_api', 'feedback_api', 'source_context', 'upload_store',
               'detection.predict', 'detection.train', 'detection.evaluate', 'detection.isolation_forest',
               'optimization.ga_isolation_forest', 'optimization.model_evolution',
+              'feature_engineering.block_metadata', 'feature_engineering.category_encoder',
+              'smart_storage.policy', 'smart_storage.optimizer', 'smart_storage.baselines', 'smart_storage.data',
+              'early_warning.model', 'early_warning.prefix_features',
+              'streaming.block_state', 'streaming.processor', 'streaming.scoring', 'streaming.sources',
+              'streaming.producer', 'streaming.syslog_receiver',
+              'multi_source.pipeline', 'multi_source.sources', 'multi_source.upload', 'multi_source.labels',
+              'parser.hdfs_parser', 'parser.openstack_parser', 'parser.apache_parser',
+              'parser.cloudtrail_parser', 'parser.django_parser',
           ]
           for name in modules:
               importlib.import_module(name)

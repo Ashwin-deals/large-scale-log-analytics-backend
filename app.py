@@ -1,5 +1,9 @@
 import os
 import re
+import sys
+
+if sys.version_info < (3, 11):
+    sys.exit(f"MorphGuard needs Python 3.11+ (scikit-learn 1.8.0 and the saved models); this is {sys.version.split()[0]}.")
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
