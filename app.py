@@ -21,6 +21,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.exceptions import HTTPException
 
 from account_api import account_bp
+from feedback_api import feedback_bp
 from db import user_details
 from early_warning_api import early_warning_bp
 from pipeline_api import pipeline_bp
@@ -53,6 +54,7 @@ app.register_blueprint(storage_bp)
 app.register_blueprint(early_warning_bp)
 app.register_blueprint(stream_bp)
 app.register_blueprint(account_bp)
+app.register_blueprint(feedback_bp)
 
 user_details.create_index("email", unique=True)
 
