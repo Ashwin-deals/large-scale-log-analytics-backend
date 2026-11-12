@@ -1,5 +1,8 @@
 # MorphGuard — System Architecture Documentation
 
+![MorphGuard architecture](architecture_diagram.svg)
+
+
 ---
 
 ## 1. Overview

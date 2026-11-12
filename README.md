@@ -1,5 +1,8 @@
 # MorphGuard — Large-Scale Log Analytics for Cloud Security
 
+![MorphGuard architecture](docs/architecture_diagram.svg)
+
+
 ## Overview
 MorphGuard is an evolutionary real-time log analytics system for detecting anomalies in cloud environments using streaming technologies and machine learning. The name reflects the two halves of the system: behaviour that *morphs* — models continuously re-optimised by a genetic algorithm — in service of *guarding* the cloud estate.
 
