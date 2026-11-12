@@ -1,0 +1,682 @@
+{
+  "generated_at": "2026-11-12T22:14:53+0530",
+  "source": {
+    "cleaned_log": "data/processed/hdfs_cleaned.csv",
+    "rows": 11173511,
+    "rows_skipped_no_block_id": 0,
+    "rows_out_of_time_order": 0,
+    "chunks": 45,
+    "blocks": 575061,
+    "events": 11173511,
+    "scan_seconds": 19.92460800000117,
+    "chunksize": 250000
+  },
+  "config": {
+    "ks": [
+      3,
+      5,
+      10,
+      20
+    ],
+    "test_size": 0.3,
+    "seed": 42,
+    "model": "IsolationForest (detection.isolation_forest.build_isolation_forest defaults), fitted on train blocks only",
+    "threshold": "GA over alert_quantile (threshold = that quantile of train scores), fitness = train F1(Anomaly)",
+    "prefix_order": "first k events of each block in file (arrival) order",
+    "lead_time": "fraction of a block's events not yet seen when the alert fires: (total - min(k, total)) / total; 0 if the block has <= k events",
+    "lead_time_seconds": "log-time seconds from the k-th event (alert) to the block's last event; mean and median over true alerts; 0 if the block has <= k events"
+  },
+  "split": {
+    "train": {
+      "blocks": 402542,
+      "anomalies": 11787
+    },
+    "test": {
+      "blocks": 172519,
+      "anomalies": 5051
+    },
+    "unlabeled_blocks_excluded": 0
+  },
+  "results": {
+    "3": {
+      "k": 3,
+      "features": [
+        "n_events",
+        "elapsed_seconds",
+        "distinct_event_types",
+        "distinct_components",
+        "block_size_max",
+        "first_component_encoded",
+        "first_event_type_encoded",
+        "dominant_component_encoded",
+        "dominant_event_type_encoded",
+        "count_RECEIVED_BLOCK",
+        "count_REPLICATE_BLOCK",
+        "count_ALLOCATE_BLOCK",
+        "count_OTHER",
+        "count_PACKET_TERMINATED",
+        "count_RECEIVE_BLOCK",
+        "count_START_TRANSFER",
+        "count_STORE_BLOCK"
+      ],
+      "dropped_constant_columns": [
+        "warn_count",
+        "error_count",
+        "count_SERVE_BLOCK",
+        "count_TRANSMIT_BLOCK"
+      ],
+      "threshold": {
+        "alert_quantile": 0.9697590628842807,
+        "score_threshold": 0.663179659840399,
+        "train_f1": 0.1882197548190036
+      },
+      "train": {
+        "precision": 0.1832797427652733,
+        "recall": 0.1934334436243319,
+        "f1": 0.18821975481900358,
+        "false_alarm_rate": 0.026000946884876714,
+        "accuracy": 0.9511429863219242,
+        "alerts": 12440,
+        "confusion_matrix": {
+          "tp": 2280,
+          "fp": 10160,
+          "fn": 9507,
+          "tn": 380595
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.08589041410569835,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.11710526315789474,
+          "expected_lead_per_alert": 0.015741973003295197,
+          "mean_seconds_over_true_alerts": 2412.9241228070177,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test": {
+        "precision": 0.18341337273734762,
+        "recall": 0.19659473371609582,
+        "f1": 0.18977544194935503,
+        "false_alarm_rate": 0.02639907325578618,
+        "accuracy": 0.950851790237597,
+        "alerts": 5414,
+        "confusion_matrix": {
+          "tp": 993,
+          "fp": 4421,
+          "fn": 4058,
+          "tn": 163047
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.0666493572238682,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.08559919436052367,
+          "expected_lead_per_alert": 0.012224383399205969,
+          "mean_seconds_over_true_alerts": 1734.0634441087614,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test_in_progress": {
+        "precision": 0.018863737239236573,
+        "recall": 0.020551257253384914,
+        "f1": 0.01967137236750752,
+        "false_alarm_rate": 0.02639907325578618,
+        "accuracy": 0.9506305214330668,
+        "alerts": 4506,
+        "confusion_matrix": {
+          "tp": 85,
+          "fp": 4421,
+          "fn": 4051,
+          "tn": 163047
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.778621314391778,
+          "median_over_true_alerts": 0.8571428571428571,
+          "share_of_true_alerts_before_block_end": 1.0,
+          "expected_lead_per_alert": 0.01468770788355551,
+          "mean_seconds_over_true_alerts": 20257.941176470587,
+          "median_seconds_over_true_alerts": 8908.0
+        },
+        "blocks": 171604,
+        "anomalies": 4136
+      },
+      "test_blocks_with_at_most_k_events": 915,
+      "ga_history": {
+        "population_size": 20,
+        "num_generations": 30,
+        "best_fitness_per_generation": [
+          0.1364009018241443,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036,
+          0.1882197548190036
+        ],
+        "wall_clock_seconds": 1.4984952499999054
+      },
+      "model_path": "data/models/early_warning/isolation_forest_k3.pkl"
+    },
+    "5": {
+      "k": 5,
+      "features": [
+        "n_events",
+        "elapsed_seconds",
+        "distinct_event_types",
+        "distinct_components",
+        "warn_count",
+        "block_size_max",
+        "first_component_encoded",
+        "first_event_type_encoded",
+        "dominant_component_encoded",
+        "dominant_event_type_encoded",
+        "count_RECEIVED_BLOCK",
+        "count_REPLICATE_BLOCK",
+        "count_ALLOCATE_BLOCK",
+        "count_OTHER",
+        "count_PACKET_TERMINATED",
+        "count_RECEIVE_BLOCK",
+        "count_SERVE_BLOCK",
+        "count_START_TRANSFER",
+        "count_STORE_BLOCK"
+      ],
+      "dropped_constant_columns": [
+        "error_count",
+        "count_TRANSMIT_BLOCK"
+      ],
+      "threshold": {
+        "alert_quantile": 0.9874381136915361,
+        "score_threshold": 0.7086578610963773,
+        "train_f1": 0.5231426536909566
+      },
+      "train": {
+        "precision": 0.8702862783810464,
+        "recall": 0.373971324340375,
+        "f1": 0.5231426536909567,
+        "false_alarm_rate": 0.0016813604432444882,
+        "accuracy": 0.9800368657183598,
+        "alerts": 5065,
+        "confusion_matrix": {
+          "tp": 4408,
+          "fp": 657,
+          "fn": 7379,
+          "tn": 390098
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.009840439069284418,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.012023593466424683,
+          "expected_lead_per_alert": 0.008563999095242985,
+          "mean_seconds_over_true_alerts": 199.16946460980037,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test": {
+        "precision": 0.8832777513101477,
+        "recall": 0.3670560285092061,
+        "f1": 0.5186013986013985,
+        "false_alarm_rate": 0.0014629660591874269,
+        "accuracy": 0.9800485743599255,
+        "alerts": 2099,
+        "confusion_matrix": {
+          "tp": 1854,
+          "fp": 245,
+          "fn": 3197,
+          "tn": 167223
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.012029725720411605,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.015102481121898598,
+          "expected_lead_per_alert": 0.010625589083203008,
+          "mean_seconds_over_true_alerts": 282.5571736785329,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test_in_progress": {
+        "precision": 0.10256410256410256,
+        "recall": 0.008682170542635658,
+        "f1": 0.01600914808461978,
+        "false_alarm_rate": 0.0014629660591874269,
+        "accuracy": 0.9798351426244779,
+        "alerts": 273,
+        "confusion_matrix": {
+          "tp": 28,
+          "fp": 245,
+          "fn": 3197,
+          "tn": 167223
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.7965396959158255,
+          "median_over_true_alerts": 0.818121693121693,
+          "share_of_true_alerts_before_block_end": 1.0,
+          "expected_lead_per_alert": 0.08169637906828979,
+          "mean_seconds_over_true_alerts": 18709.321428571428,
+          "median_seconds_over_true_alerts": 8137.5
+        },
+        "blocks": 170693,
+        "anomalies": 3225
+      },
+      "test_blocks_with_at_most_k_events": 1826,
+      "ga_history": {
+        "population_size": 20,
+        "num_generations": 30,
+        "best_fitness_per_generation": [
+          0.5068599247621155,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5069037887992931,
+          0.5095191812932365,
+          0.5095191812932365,
+          0.5095191812932365,
+          0.5095191812932365,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566,
+          0.5231426536909566
+        ],
+        "wall_clock_seconds": 1.5150178750009218
+      },
+      "model_path": "data/models/early_warning/isolation_forest_k5.pkl"
+    },
+    "10": {
+      "k": 10,
+      "features": [
+        "n_events",
+        "elapsed_seconds",
+        "distinct_event_types",
+        "distinct_components",
+        "warn_count",
+        "block_size_max",
+        "first_component_encoded",
+        "first_event_type_encoded",
+        "dominant_component_encoded",
+        "dominant_event_type_encoded",
+        "count_RECEIVED_BLOCK",
+        "count_REPLICATE_BLOCK",
+        "count_ALLOCATE_BLOCK",
+        "count_OTHER",
+        "count_PACKET_TERMINATED",
+        "count_RECEIVE_BLOCK",
+        "count_SERVE_BLOCK",
+        "count_START_TRANSFER",
+        "count_STORE_BLOCK",
+        "count_TRANSMIT_BLOCK"
+      ],
+      "dropped_constant_columns": [
+        "error_count"
+      ],
+      "threshold": {
+        "alert_quantile": 0.9867102064292502,
+        "score_threshold": 0.6671654019147637,
+        "train_f1": 0.5582073875240707
+      },
+      "train": {
+        "precision": 0.894018691588785,
+        "recall": 0.405786035462798,
+        "f1": 0.5582073875240707,
+        "false_alarm_rate": 0.0014510370948548324,
+        "accuracy": 0.9811920246831387,
+        "alerts": 5350,
+        "confusion_matrix": {
+          "tp": 4783,
+          "fp": 567,
+          "fn": 7004,
+          "tn": 390188
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.04881932853974487,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.08822914488814551,
+          "expected_lead_per_alert": 0.04364539222534574,
+          "mean_seconds_over_true_alerts": 1280.1975747438846,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test": {
+        "precision": 0.8811924594476107,
+        "recall": 0.3979410017818254,
+        "f1": 0.5482815057283142,
+        "false_alarm_rate": 0.001618219600162419,
+        "accuracy": 0.9808021145497018,
+        "alerts": 2281,
+        "confusion_matrix": {
+          "tp": 2010,
+          "fp": 271,
+          "fn": 3041,
+          "tn": 167197
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.0493021445765562,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.08955223880597014,
+          "expected_lead_per_alert": 0.043444678035457235,
+          "mean_seconds_over_true_alerts": 1591.8731343283582,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test_in_progress": {
+        "precision": 0.3991130820399113,
+        "recall": 0.055883266066438994,
+        "f1": 0.09803921568627451,
+        "false_alarm_rate": 0.001618219600162419,
+        "accuracy": 0.9805962891574735,
+        "alerts": 451,
+        "confusion_matrix": {
+          "tp": 180,
+          "fp": 271,
+          "fn": 3041,
+          "tn": 167197
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.5505406144382108,
+          "median_over_true_alerts": 0.5454545454545454,
+          "share_of_true_alerts_before_block_end": 1.0,
+          "expected_lead_per_alert": 0.2197279614165808,
+          "mean_seconds_over_true_alerts": 17775.916666666668,
+          "median_seconds_over_true_alerts": 8062.5
+        },
+        "blocks": 170689,
+        "anomalies": 3221
+      },
+      "test_blocks_with_at_most_k_events": 1830,
+      "ga_history": {
+        "population_size": 20,
+        "num_generations": 30,
+        "best_fitness_per_generation": [
+          0.5291400923685947,
+          0.5291400923685947,
+          0.5291400923685947,
+          0.5291400923685947,
+          0.5291400923685947,
+          0.5291400923685947,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5349574503587519,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5469009736404654,
+          0.5582073875240707,
+          0.5582073875240707,
+          0.5582073875240707,
+          0.5582073875240707
+        ],
+        "wall_clock_seconds": 1.3552439579998463
+      },
+      "model_path": "data/models/early_warning/isolation_forest_k10.pkl"
+    },
+    "20": {
+      "k": 20,
+      "features": [
+        "n_events",
+        "elapsed_seconds",
+        "distinct_event_types",
+        "distinct_components",
+        "warn_count",
+        "block_size_max",
+        "first_component_encoded",
+        "first_event_type_encoded",
+        "dominant_component_encoded",
+        "dominant_event_type_encoded",
+        "count_RECEIVED_BLOCK",
+        "count_REPLICATE_BLOCK",
+        "count_ALLOCATE_BLOCK",
+        "count_OTHER",
+        "count_PACKET_TERMINATED",
+        "count_RECEIVE_BLOCK",
+        "count_SERVE_BLOCK",
+        "count_START_TRANSFER",
+        "count_STORE_BLOCK",
+        "count_TRANSMIT_BLOCK"
+      ],
+      "dropped_constant_columns": [
+        "error_count"
+      ],
+      "threshold": {
+        "alert_quantile": 0.9801146866300452,
+        "score_threshold": 0.6618634800356901,
+        "train_f1": 0.6812509473046027
+      },
+      "train": {
+        "precision": 0.8421184111916062,
+        "recall": 0.5719860863663357,
+        "f1": 0.6812509473046026,
+        "false_alarm_rate": 0.0032347634707169453,
+        "accuracy": 0.9843271012714201,
+        "alerts": 8006,
+        "confusion_matrix": {
+          "tp": 6742,
+          "fp": 1264,
+          "fn": 5045,
+          "tn": 389491
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.12064291803720396,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.35197270839513495,
+          "expected_lead_per_alert": 0.10159562245900938,
+          "mean_seconds_over_true_alerts": 4984.826016018986,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test": {
+        "precision": 0.8490011750881316,
+        "recall": 0.5721639279350623,
+        "f1": 0.6836191602602011,
+        "false_alarm_rate": 0.0030692430792748464,
+        "accuracy": 0.9844944614796052,
+        "alerts": 3404,
+        "confusion_matrix": {
+          "tp": 2890,
+          "fp": 514,
+          "fn": 2161,
+          "tn": 166954
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.1241672505019634,
+          "median_over_true_alerts": 0.0,
+          "share_of_true_alerts_before_block_end": 0.3660899653979239,
+          "expected_lead_per_alert": 0.10541814158362932,
+          "mean_seconds_over_true_alerts": 5165.393771626297,
+          "median_seconds_over_true_alerts": 0.0
+        }
+      },
+      "test_in_progress": {
+        "precision": 0.6960526315789474,
+        "recall": 0.5266301642608263,
+        "f1": 0.5996032870501559,
+        "false_alarm_rate": 0.011455492189437144,
+        "accuracy": 0.966626514561043,
+        "alerts": 1520,
+        "confusion_matrix": {
+          "tp": 1058,
+          "fp": 462,
+          "fn": 951,
+          "tn": 39868
+        },
+        "lead_time": {
+          "mean_over_true_alerts": 0.33917141205167695,
+          "median_over_true_alerts": 0.3103448275862069,
+          "share_of_true_alerts_before_block_end": 1.0,
+          "expected_lead_per_alert": 0.23608115391491724,
+          "mean_seconds_over_true_alerts": 14109.629489603025,
+          "median_seconds_over_true_alerts": 10466.0
+        },
+        "blocks": 42339,
+        "anomalies": 2009
+      },
+      "test_blocks_with_at_most_k_events": 130180,
+      "ga_history": {
+        "population_size": 20,
+        "num_generations": 30,
+        "best_fitness_per_generation": [
+          0.6345271375072525,
+          0.6345271375072525,
+          0.6345271375072525,
+          0.6345271375072525,
+          0.6345271375072525,
+          0.6345271375072525,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6646878198567042,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027,
+          0.6812509473046027
+        ],
+        "wall_clock_seconds": 1.469204584000181
+      },
+      "model_path": "data/models/early_warning/isolation_forest_k20.pkl"
+    }
+  },
+  "trade_off": {
+    "split": "test",
+    "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+    "points": [
+      {
+        "k": 3,
+        "precision": 0.18341337273734762,
+        "mean_lead_over_true_alerts": 0.0666493572238682,
+        "expected_lead_per_alert": 0.012224383399205969,
+        "on_pareto_front": false
+      },
+      {
+        "k": 5,
+        "precision": 0.8832777513101477,
+        "mean_lead_over_true_alerts": 0.012029725720411605,
+        "expected_lead_per_alert": 0.010625589083203008,
+        "on_pareto_front": true
+      },
+      {
+        "k": 10,
+        "precision": 0.8811924594476107,
+        "mean_lead_over_true_alerts": 0.0493021445765562,
+        "expected_lead_per_alert": 0.043444678035457235,
+        "on_pareto_front": true
+      },
+      {
+        "k": 20,
+        "precision": 0.8490011750881316,
+        "mean_lead_over_true_alerts": 0.1241672505019634,
+        "expected_lead_per_alert": 0.10541814158362932,
+        "on_pareto_front": true
+      }
+    ],
+    "pareto_front": [
+      5,
+      10,
+      20
+    ],
+    "best_k": 20
+  },
+  "trade_off_in_progress": {
+    "split": "test_in_progress",
+    "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+    "points": [
+      {
+        "k": 3,
+        "precision": 0.018863737239236573,
+        "mean_lead_over_true_alerts": 0.778621314391778,
+        "expected_lead_per_alert": 0.01468770788355551,
+        "on_pareto_front": false
+      },
+      {
+        "k": 5,
+        "precision": 0.10256410256410256,
+        "mean_lead_over_true_alerts": 0.7965396959158255,
+        "expected_lead_per_alert": 0.08169637906828979,
+        "on_pareto_front": true
+      },
+      {
+        "k": 10,
+        "precision": 0.3991130820399113,
+        "mean_lead_over_true_alerts": 0.5505406144382108,
+        "expected_lead_per_alert": 0.2197279614165808,
+        "on_pareto_front": true
+      },
+      {
+        "k": 20,
+        "precision": 0.6960526315789474,
+        "mean_lead_over_true_alerts": 0.33917141205167695,
+        "expected_lead_per_alert": 0.23608115391491724,
+        "on_pareto_front": true
+      }
+    ],
+    "pareto_front": [
+      5,
+      10,
+      20
+    ],
+    "best_k": 20
+  }
+}

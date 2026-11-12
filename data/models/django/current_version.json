@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "model_path": "data/models/django/isolation_forest_v2.pkl",
+  "metrics_path": "data/evaluation/django_metrics/isolation_forest_v2_metrics.json",
+  "metric": "f1",
+  "metric_value": 0.4358974358974359,
+  "promoted_at": "2026-11-12T07:12:04.727055+00:00"
+}

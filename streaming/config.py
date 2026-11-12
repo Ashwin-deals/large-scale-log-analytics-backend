@@ -1,0 +1,10 @@
+import os
+
+BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+
+TOPIC_LOGS_RAW = "logs.raw"
+TOPIC_ALERTS = "alerts"
+TOPIC_STORAGE_DECISIONS = "storage.decisions"
+TOPICS = (TOPIC_LOGS_RAW, TOPIC_ALERTS, TOPIC_STORAGE_DECISIONS)
+
+CONSUMER_GROUP = "stream-processor"

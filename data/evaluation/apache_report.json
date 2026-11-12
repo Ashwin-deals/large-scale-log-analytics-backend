@@ -1,0 +1,861 @@
+{
+  "source": "apache",
+  "title": "Apache error log (INJECTED anomalies)",
+  "generated_at": "2026-11-12T12:39:21+0530",
+  "data_kind": "real, anomalies INJECTED",
+  "label_kind": "INJECTED",
+  "label_description": "Labels come from data/raw/apache/injected/Apache_INJECTED_labels.csv: windows where scripts/inject_apache_anomalies.py (seed 42) injected an error burst or never-seen templates are Anomaly; all other windows are Normal.",
+  "synthetic": false,
+  "injected": true,
+  "weak_labels": false,
+  "warnings": [
+    "Anomalies are INJECTED, not observed: the detector is measured on synthetic error bursts and unseen templates added to the real log, not on real Apache incidents.",
+    "Windows that were not injected are labeled Normal, but the real log may contain genuine, unlabeled anomalies; flagging those counts as a false positive here.",
+    "The shared HDFSDataCleaner removed 23,691 exact-duplicate rows (37.9% of recognized lines). At 1-second resolution, identical lines repeated within the same second count as one event, so per-block event counts here understate bursts of repeated lines."
+  ],
+  "block_definition": "Fixed 60-second time window (no block id in the log).",
+  "evaluation_protocol": "stratified 70/30 train/test; all metrics on test",
+  "ingest": {
+    "input_files": [
+      "data/raw/apache/injected/Apache_INJECTED.log"
+    ],
+    "lines_or_records": 66953,
+    "unparsed": 4478,
+    "no_block_id": 0,
+    "recognized": 62475,
+    "events_after_cleaning": 38784,
+    "dropped_by_cleaner": 23691,
+    "blocks": 8258
+  },
+  "labels": {
+    "blocks": 8258,
+    "anomalies": 248,
+    "anomaly_rate": 0.030031484620973603,
+    "label_file": "data/raw/apache/injected/Apache_INJECTED_labels.csv",
+    "blocks_without_a_label_treated_normal": 0
+  },
+  "split": {
+    "train_blocks": 5780,
+    "test_blocks": 2478,
+    "test_anomalies": 74
+  },
+  "features": [
+    "hour_of_day",
+    "component_encoded",
+    "event_type_encoded",
+    "block_size",
+    "event_frequency",
+    "source_ip_encoded",
+    "destination_ip_encoded"
+  ],
+  "models": {
+    "v1_baseline": {
+      "accuracy": 0.8821630347054076,
+      "precision": 0.20218579234972678,
+      "recall": 1.0,
+      "f1": 0.33636363636363636,
+      "confusion_matrix": {
+        "labels": [
+          "Normal",
+          "Anomaly"
+        ],
+        "matrix": [
+          [
+            2112,
+            292
+          ],
+          [
+            0,
+            74
+          ]
+        ]
+      },
+      "support": {
+        "total": 2478,
+        "normal": 2404,
+        "anomaly": 74
+      },
+      "caught": "caught 74 of 74"
+    },
+    "ga_candidate": {
+      "accuracy": 0.9810330912025828,
+      "precision": 0.6421052631578947,
+      "recall": 0.8243243243243243,
+      "f1": 0.7218934911242604,
+      "confusion_matrix": {
+        "labels": [
+          "Normal",
+          "Anomaly"
+        ],
+        "matrix": [
+          [
+            2370,
+            34
+          ],
+          [
+            13,
+            61
+          ]
+        ]
+      },
+      "support": {
+        "total": 2478,
+        "normal": 2404,
+        "anomaly": 74
+      },
+      "caught": "caught 61 of 74",
+      "chromosome": {
+        "selected_features": [
+          "hour_of_day",
+          "event_type_encoded",
+          "event_frequency",
+          "destination_ip_encoded"
+        ],
+        "feature_mask": {
+          "hour_of_day": 1,
+          "component_encoded": 0,
+          "event_type_encoded": 1,
+          "block_size": 0,
+          "event_frequency": 1,
+          "source_ip_encoded": 0,
+          "destination_ip_encoded": 1
+        },
+        "n_estimators": 50,
+        "max_samples": 0.6859693229517501,
+        "max_features": 0.9100224131314023,
+        "contamination": 0.04476095652676801,
+        "bootstrap": true
+      },
+      "ga_best_fitness": 0.6836027713625866,
+      "ga_generations": 12,
+      "ga_seconds": 27.872937000000093
+    },
+    "promotion": {
+      "timestamp": "2026-11-12T07:09:20.368182+00:00",
+      "metric": "f1",
+      "promoted": true,
+      "current_version": 1,
+      "current_model_path": "data/models/apache/isolation_forest_v1.pkl",
+      "current_metric_value": 0.33636363636363636,
+      "candidate_model_path": "data/models/apache/isolation_forest_candidate.pkl",
+      "candidate_metric_value": 0.7218934911242604,
+      "new_version": 2,
+      "promoted_model_path": "data/models/apache/isolation_forest_v2.pkl",
+      "promoted_metrics_path": "data/evaluation/apache_metrics/isolation_forest_v2_metrics.json",
+      "archived_candidate_path": null
+    },
+    "deployed": {
+      "version": 2,
+      "model_path": "data/models/apache/isolation_forest_v2.pkl",
+      "f1": 0.7218934911242604
+    }
+  },
+  "smart_storage": {
+    "protocol": "50/50 stratified tune/holdout",
+    "policy": {
+      "weights": {
+        "anomaly_score": 0.4429468726904555,
+        "event_frequency": 0.0023117208387273846,
+        "block_size": 0.5547414064708172
+      },
+      "error_weight": 0.2,
+      "thresholds": {
+        "hot": 0.6110639280747412,
+        "warm": 0.03941408696681144
+      },
+      "summary_fraction": 0.03592464230262555
+    },
+    "holdout": {
+      "storage_saved_pct": 39.45968718731897,
+      "weighted_retention": 0.9354838709677419,
+      "full_retention": 0.8709677419354839,
+      "coverage": 1.0,
+      "fitness": 24.943558155060895,
+      "meets_retention_target": false,
+      "tier_counts": {
+        "HOT": 172,
+        "WARM": 3957,
+        "COLD": 0
+      },
+      "tier_anomalies": {
+        "HOT": 108,
+        "WARM": 16,
+        "COLD": 0
+      },
+      "n_blocks": 4129,
+      "n_anomalies": 124
+    },
+    "baselines_on_holdout": {
+      "keep_all": {
+        "storage_saved_pct": 0.0,
+        "weighted_retention": 1.0,
+        "full_retention": 1.0,
+        "coverage": 1.0,
+        "fitness": 0.0,
+        "meets_retention_target": true
+      },
+      "keep_flagged_only": {
+        "storage_saved_pct": 37.042498288482804,
+        "weighted_retention": 0.9112903225806451,
+        "full_retention": 0.9112903225806451,
+        "coverage": 0.9112903225806451,
+        "fitness": -1.6671791308720216,
+        "meets_retention_target": false
+      },
+      "top_k_percent_tuned": {
+        "storage_saved_pct": 35.16772868502818,
+        "weighted_retention": 0.9354838709677419,
+        "full_retention": 0.9354838709677419,
+        "coverage": 0.9354838709677419,
+        "fitness": 20.651599652770106,
+        "meets_retention_target": false
+      },
+      "top_k_percent_same_savings": {
+        "storage_saved_pct": 39.46495339407024,
+        "weighted_retention": 0.8548387096774194,
+        "full_retention": 0.8548387096774194,
+        "coverage": 0.8548387096774194,
+        "fitness": -55.69633692851034,
+        "meets_retention_target": false
+      },
+      "random_sampling_same_savings": {
+        "storage_saved_pct": 39.44599504976565,
+        "weighted_retention": 0.5112903225806451,
+        "full_retention": 0.5112903225806451,
+        "coverage": 0.5112903225806451,
+        "fitness": -399.2636823695892,
+        "meets_retention_target": false
+      }
+    },
+    "ga_beats_baselines": true,
+    "policy_path": "data/storage/apache/policy_best.json"
+  },
+  "early_warning": {
+    "ks": [
+      3,
+      5,
+      10,
+      20
+    ],
+    "blocks": 8258,
+    "median_events_per_block": 1.0,
+    "results": {
+      "3": {
+        "k": 3,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "warn_count",
+          "error_count",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_(<n>)No space left on device: mod_rewrite: could not create rewrite_log_lock",
+          "count_(<n>)Permission denied: make_sock: could not bind to address <ip>",
+          "count_<path> (Fedora) configured -- resuming normal operations",
+          "count_<path> configured",
+          "count_Attempt to serve directory: <path>",
+          "count_Digest: done",
+          "count_Digest: generating secret for digest authentication ...",
+          "count_Directory index forbidden by rule: <path>",
+          "count_File does not exist: <path>",
+          "count_Graceful restart requested, doing restart",
+          "count_Invalid method in request get <path>",
+          "count_LDAP: Built with OpenLDAP LDAP SDK",
+          "count_LDAP: SSL support unavailable",
+          "count_child process <n> still did not exit, sending a SIGTERM",
+          "count_client denied by server configuration: <path>",
+          "count_configuration error: couldn't perform authentication. AuthType not set!: <path>",
+          "count_jk2_init() Can't find child <n> in scoreboard",
+          "count_jk2_init() Found child <n> in scoreboard slot <n>",
+          "count_mod_jk child init <n> -<n>",
+          "count_mod_jk child init <n> <n>",
+          "count_mod_jk child workerEnv in error state <n>",
+          "count_mod_jk2 Shutting down",
+          "count_mod_security: Access denied with code <n> (phase <n>). Pattern match \"union select\" at ARGS:id [id \"<n>\"]",
+          "count_request failed: URI too long (longer than <n>)",
+          "count_request failed: error reading the headers",
+          "count_script not found or unable to stat: <path>",
+          "count_server reached MaxClients setting, consider raising the MaxClients setting",
+          "count_suEXEC mechanism enabled (wrapper: <path>)",
+          "count_uriMap.mapUri() uri must start with <path>",
+          "count_workerEnv.init() ok <path>"
+        ],
+        "dropped_constant_columns": [
+          "block_size_max",
+          "count_Invalid URI in request GET <path>",
+          "count_attempt to invoke directory as script: <path>",
+          "count_client sent <path> request without hostname (see RFC2616 section <n>.<n>): <path>",
+          "count_config.update(): Can't create channel.jni:jni",
+          "count_config.update(): Can't create vm:",
+          "count_config.update(): Can't create worker.jni:onShutdown",
+          "count_config.update(): Can't create worker.jni:onStartup",
+          "count_env.createBean2(): Factory error creating channel.jni:jni ( channel.jni, jni)",
+          "count_env.createBean2(): Factory error creating vm: ( vm, )",
+          "count_env.createBean2(): Factory error creating worker.jni:onShutdown ( worker.jni, onShutdown)",
+          "count_env.createBean2(): Factory error creating worker.jni:onStartup ( worker.jni, onStartup)",
+          "count_mod_python: Creating <n> session mutexes based on <n> max processes and <n> max threads.",
+          "count_mod_security: Access denied with code <n>. Error reading POST data, error_code=<n> [hostname \"<ip>\"] [uri \"/xmlrpc.php\"]"
+        ],
+        "threshold": {
+          "alert_quantile": 0.9497588195530836,
+          "score_threshold": 0.548423827377189,
+          "train_f1": 0.5032258064516129
+        },
+        "train": {
+          "precision": 0.4020618556701031,
+          "recall": 0.6724137931034483,
+          "f1": 0.5032258064516129,
+          "false_alarm_rate": 0.031038173385658223,
+          "accuracy": 0.9600346020761246,
+          "alerts": 291,
+          "confusion_matrix": {
+            "tp": 117,
+            "fp": 174,
+            "fn": 57,
+            "tn": 5432
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.8293547055921684,
+            "median_over_true_alerts": 0.8333333333333334,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.3334518919391192
+          }
+        },
+        "test": {
+          "precision": 0.40336134453781514,
+          "recall": 0.6486486486486487,
+          "f1": 0.4974093264248705,
+          "false_alarm_rate": 0.029534109816971715,
+          "accuracy": 0.9608555286521389,
+          "alerts": 119,
+          "confusion_matrix": {
+            "tp": 48,
+            "fp": 71,
+            "fn": 26,
+            "tn": 2333
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7992543721345496,
+            "median_over_true_alerts": 0.8235294117647058,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.32238831817191915
+          },
+          "caught": "caught 48 of 74"
+        },
+        "test_in_progress": {
+          "precision": 0.5161290322580645,
+          "recall": 0.6486486486486487,
+          "f1": 0.5748502994011976,
+          "false_alarm_rate": 0.09090909090909091,
+          "accuracy": 0.875219683655536,
+          "alerts": 93,
+          "confusion_matrix": {
+            "tp": 48,
+            "fp": 45,
+            "fn": 26,
+            "tn": 450
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7992543721345496,
+            "median_over_true_alerts": 0.8235294117647058,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.41251838561783205
+          },
+          "blocks": 569,
+          "anomalies": 74
+        },
+        "test_blocks_with_at_most_k_events": 1909
+      },
+      "5": {
+        "k": 5,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "warn_count",
+          "error_count",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_(<n>)No space left on device: mod_rewrite: could not create rewrite_log_lock",
+          "count_(<n>)Permission denied: make_sock: could not bind to address <ip>",
+          "count_<path> (Fedora) configured -- resuming normal operations",
+          "count_<path> configured",
+          "count_Attempt to serve directory: <path>",
+          "count_Digest: done",
+          "count_Digest: generating secret for digest authentication ...",
+          "count_Directory index forbidden by rule: <path>",
+          "count_File does not exist: <path>",
+          "count_Graceful restart requested, doing restart",
+          "count_Invalid method in request get <path>",
+          "count_LDAP: Built with OpenLDAP LDAP SDK",
+          "count_LDAP: SSL support unavailable",
+          "count_child process <n> still did not exit, sending a SIGTERM",
+          "count_client denied by server configuration: <path>",
+          "count_configuration error: couldn't perform authentication. AuthType not set!: <path>",
+          "count_env.createBean2(): Factory error creating channel.jni:jni ( channel.jni, jni)",
+          "count_jk2_init() Can't find child <n> in scoreboard",
+          "count_jk2_init() Found child <n> in scoreboard slot <n>",
+          "count_mod_jk child init <n> -<n>",
+          "count_mod_jk child init <n> <n>",
+          "count_mod_jk child workerEnv in error state <n>",
+          "count_mod_jk2 Shutting down",
+          "count_mod_security: Access denied with code <n> (phase <n>). Pattern match \"union select\" at ARGS:id [id \"<n>\"]",
+          "count_request failed: URI too long (longer than <n>)",
+          "count_request failed: error reading the headers",
+          "count_script not found or unable to stat: <path>",
+          "count_server reached MaxClients setting, consider raising the MaxClients setting",
+          "count_suEXEC mechanism enabled (wrapper: <path>)",
+          "count_uriMap.mapUri() uri must start with <path>",
+          "count_workerEnv.init() ok <path>"
+        ],
+        "dropped_constant_columns": [
+          "block_size_max",
+          "count_Invalid URI in request GET <path>",
+          "count_attempt to invoke directory as script: <path>",
+          "count_client sent <path> request without hostname (see RFC2616 section <n>.<n>): <path>",
+          "count_config.update(): Can't create channel.jni:jni",
+          "count_config.update(): Can't create vm:",
+          "count_config.update(): Can't create worker.jni:onShutdown",
+          "count_config.update(): Can't create worker.jni:onStartup",
+          "count_env.createBean2(): Factory error creating vm: ( vm, )",
+          "count_env.createBean2(): Factory error creating worker.jni:onShutdown ( worker.jni, onShutdown)",
+          "count_env.createBean2(): Factory error creating worker.jni:onStartup ( worker.jni, onStartup)",
+          "count_mod_python: Creating <n> session mutexes based on <n> max processes and <n> max threads.",
+          "count_mod_security: Access denied with code <n>. Error reading POST data, error_code=<n> [hostname \"<ip>\"] [uri \"/xmlrpc.php\"]"
+        ],
+        "threshold": {
+          "alert_quantile": 0.9378884745278434,
+          "score_threshold": 0.5183898285757467,
+          "train_f1": 0.5430711610486891
+        },
+        "train": {
+          "precision": 0.4027777777777778,
+          "recall": 0.8333333333333334,
+          "f1": 0.5430711610486892,
+          "false_alarm_rate": 0.03835176596503746,
+          "accuracy": 0.9577854671280277,
+          "alerts": 360,
+          "confusion_matrix": {
+            "tp": 145,
+            "fp": 215,
+            "fn": 29,
+            "tn": 5391
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.738023624852543,
+            "median_over_true_alerts": 0.7619047619047619,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.2972595155656076
+          }
+        },
+        "test": {
+          "precision": 0.4492753623188406,
+          "recall": 0.8378378378378378,
+          "f1": 0.5849056603773585,
+          "false_alarm_rate": 0.03161397670549085,
+          "accuracy": 0.9644874899112187,
+          "alerts": 138,
+          "confusion_matrix": {
+            "tp": 62,
+            "fp": 76,
+            "fn": 12,
+            "tn": 2328
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7174786150723566,
+            "median_over_true_alerts": 0.72953216374269,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.32234546474265297
+          },
+          "caught": "caught 62 of 74"
+        },
+        "test_in_progress": {
+          "precision": 0.5585585585585585,
+          "recall": 0.8378378378378378,
+          "f1": 0.6702702702702702,
+          "false_alarm_rate": 0.16838487972508592,
+          "accuracy": 0.8328767123287671,
+          "alerts": 111,
+          "confusion_matrix": {
+            "tp": 62,
+            "fp": 49,
+            "fn": 12,
+            "tn": 242
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7174786150723566,
+            "median_over_true_alerts": 0.72953216374269,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.4007538210314064
+          },
+          "blocks": 365,
+          "anomalies": 74
+        },
+        "test_blocks_with_at_most_k_events": 2113
+      },
+      "10": {
+        "k": 10,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "warn_count",
+          "error_count",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_(<n>)No space left on device: mod_rewrite: could not create rewrite_log_lock",
+          "count_(<n>)Permission denied: make_sock: could not bind to address <ip>",
+          "count_<path> (Fedora) configured -- resuming normal operations",
+          "count_<path> configured",
+          "count_Attempt to serve directory: <path>",
+          "count_Digest: done",
+          "count_Digest: generating secret for digest authentication ...",
+          "count_Directory index forbidden by rule: <path>",
+          "count_File does not exist: <path>",
+          "count_Graceful restart requested, doing restart",
+          "count_Invalid URI in request GET <path>",
+          "count_Invalid method in request get <path>",
+          "count_LDAP: Built with OpenLDAP LDAP SDK",
+          "count_LDAP: SSL support unavailable",
+          "count_child process <n> still did not exit, sending a SIGTERM",
+          "count_client denied by server configuration: <path>",
+          "count_config.update(): Can't create channel.jni:jni",
+          "count_config.update(): Can't create vm:",
+          "count_config.update(): Can't create worker.jni:onStartup",
+          "count_configuration error: couldn't perform authentication. AuthType not set!: <path>",
+          "count_env.createBean2(): Factory error creating channel.jni:jni ( channel.jni, jni)",
+          "count_env.createBean2(): Factory error creating vm: ( vm, )",
+          "count_env.createBean2(): Factory error creating worker.jni:onStartup ( worker.jni, onStartup)",
+          "count_jk2_init() Can't find child <n> in scoreboard",
+          "count_jk2_init() Found child <n> in scoreboard slot <n>",
+          "count_mod_jk child init <n> -<n>",
+          "count_mod_jk child init <n> <n>",
+          "count_mod_jk child workerEnv in error state <n>",
+          "count_mod_jk2 Shutting down",
+          "count_mod_security: Access denied with code <n> (phase <n>). Pattern match \"union select\" at ARGS:id [id \"<n>\"]",
+          "count_request failed: URI too long (longer than <n>)",
+          "count_request failed: error reading the headers",
+          "count_script not found or unable to stat: <path>",
+          "count_server reached MaxClients setting, consider raising the MaxClients setting",
+          "count_suEXEC mechanism enabled (wrapper: <path>)",
+          "count_uriMap.mapUri() uri must start with <path>",
+          "count_workerEnv.init() ok <path>"
+        ],
+        "dropped_constant_columns": [
+          "block_size_max",
+          "count_attempt to invoke directory as script: <path>",
+          "count_client sent <path> request without hostname (see RFC2616 section <n>.<n>): <path>",
+          "count_config.update(): Can't create worker.jni:onShutdown",
+          "count_env.createBean2(): Factory error creating worker.jni:onShutdown ( worker.jni, onShutdown)",
+          "count_mod_python: Creating <n> session mutexes based on <n> max processes and <n> max threads.",
+          "count_mod_security: Access denied with code <n>. Error reading POST data, error_code=<n> [hostname \"<ip>\"] [uri \"/xmlrpc.php\"]"
+        ],
+        "threshold": {
+          "alert_quantile": 0.9536788100403436,
+          "score_threshold": 0.548693221706866,
+          "train_f1": 0.6425339366515838
+        },
+        "train": {
+          "precision": 0.5298507462686567,
+          "recall": 0.8160919540229885,
+          "f1": 0.6425339366515838,
+          "false_alarm_rate": 0.022475918658580094,
+          "accuracy": 0.9726643598615917,
+          "alerts": 268,
+          "confusion_matrix": {
+            "tp": 142,
+            "fp": 126,
+            "fn": 32,
+            "tn": 5480
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.4944838904248024,
+            "median_over_true_alerts": 0.5119047619047619,
+            "share_of_true_alerts_before_block_end": 0.8169014084507042,
+            "expected_lead_per_alert": 0.2620026583594102
+          }
+        },
+        "test": {
+          "precision": 0.5377358490566038,
+          "recall": 0.7702702702702703,
+          "f1": 0.6333333333333334,
+          "false_alarm_rate": 0.02038269550748752,
+          "accuracy": 0.9733656174334141,
+          "alerts": 106,
+          "confusion_matrix": {
+            "tp": 57,
+            "fp": 49,
+            "fn": 17,
+            "tn": 2355
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.4453259925510573,
+            "median_over_true_alerts": 0.4444444444444444,
+            "share_of_true_alerts_before_block_end": 0.7894736842105263,
+            "expected_lead_per_alert": 0.23946775071141763
+          },
+          "caught": "caught 57 of 74"
+        },
+        "test_in_progress": {
+          "precision": 0.5421686746987951,
+          "recall": 0.7258064516129032,
+          "f1": 0.6206896551724138,
+          "false_alarm_rate": 0.3333333333333333,
+          "accuracy": 0.6875,
+          "alerts": 83,
+          "confusion_matrix": {
+            "tp": 45,
+            "fp": 38,
+            "fn": 17,
+            "tn": 76
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.5640795905646726,
+            "median_over_true_alerts": 0.5238095238095238,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.3058262840410876
+          },
+          "blocks": 176,
+          "anomalies": 62
+        },
+        "test_blocks_with_at_most_k_events": 2302
+      },
+      "20": {
+        "k": 20,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "warn_count",
+          "error_count",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_(<n>)No space left on device: mod_rewrite: could not create rewrite_log_lock",
+          "count_(<n>)Permission denied: make_sock: could not bind to address <ip>",
+          "count_<path> (Fedora) configured -- resuming normal operations",
+          "count_<path> configured",
+          "count_Attempt to serve directory: <path>",
+          "count_Digest: done",
+          "count_Digest: generating secret for digest authentication ...",
+          "count_Directory index forbidden by rule: <path>",
+          "count_File does not exist: <path>",
+          "count_Graceful restart requested, doing restart",
+          "count_Invalid URI in request GET <path>",
+          "count_Invalid method in request get <path>",
+          "count_LDAP: Built with OpenLDAP LDAP SDK",
+          "count_LDAP: SSL support unavailable",
+          "count_child process <n> still did not exit, sending a SIGTERM",
+          "count_client denied by server configuration: <path>",
+          "count_config.update(): Can't create channel.jni:jni",
+          "count_config.update(): Can't create vm:",
+          "count_config.update(): Can't create worker.jni:onShutdown",
+          "count_config.update(): Can't create worker.jni:onStartup",
+          "count_configuration error: couldn't perform authentication. AuthType not set!: <path>",
+          "count_env.createBean2(): Factory error creating channel.jni:jni ( channel.jni, jni)",
+          "count_env.createBean2(): Factory error creating vm: ( vm, )",
+          "count_env.createBean2(): Factory error creating worker.jni:onShutdown ( worker.jni, onShutdown)",
+          "count_env.createBean2(): Factory error creating worker.jni:onStartup ( worker.jni, onStartup)",
+          "count_jk2_init() Can't find child <n> in scoreboard",
+          "count_jk2_init() Found child <n> in scoreboard slot <n>",
+          "count_mod_jk child init <n> -<n>",
+          "count_mod_jk child init <n> <n>",
+          "count_mod_jk child workerEnv in error state <n>",
+          "count_mod_jk2 Shutting down",
+          "count_mod_python: Creating <n> session mutexes based on <n> max processes and <n> max threads.",
+          "count_mod_security: Access denied with code <n> (phase <n>). Pattern match \"union select\" at ARGS:id [id \"<n>\"]",
+          "count_request failed: URI too long (longer than <n>)",
+          "count_request failed: error reading the headers",
+          "count_script not found or unable to stat: <path>",
+          "count_server reached MaxClients setting, consider raising the MaxClients setting",
+          "count_suEXEC mechanism enabled (wrapper: <path>)",
+          "count_uriMap.mapUri() uri must start with <path>",
+          "count_workerEnv.init() ok <path>"
+        ],
+        "dropped_constant_columns": [
+          "block_size_max",
+          "count_attempt to invoke directory as script: <path>",
+          "count_client sent <path> request without hostname (see RFC2616 section <n>.<n>): <path>",
+          "count_mod_security: Access denied with code <n>. Error reading POST data, error_code=<n> [hostname \"<ip>\"] [uri \"/xmlrpc.php\"]"
+        ],
+        "threshold": {
+          "alert_quantile": 0.9434082392877707,
+          "score_threshold": 0.5316091266720199,
+          "train_f1": 0.6533864541832669
+        },
+        "train": {
+          "precision": 0.5,
+          "recall": 0.9425287356321839,
+          "f1": 0.6533864541832669,
+          "false_alarm_rate": 0.029254370317516945,
+          "accuracy": 0.9698961937716263,
+          "alerts": 328,
+          "confusion_matrix": {
+            "tp": 164,
+            "fp": 164,
+            "fn": 10,
+            "tn": 5442
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.36660190276229226,
+            "median_over_true_alerts": 0.375,
+            "share_of_true_alerts_before_block_end": 0.5975609756097561,
+            "expected_lead_per_alert": 0.18330095138114613
+          }
+        },
+        "test": {
+          "precision": 0.5426356589147286,
+          "recall": 0.9459459459459459,
+          "f1": 0.6896551724137931,
+          "false_alarm_rate": 0.02454242928452579,
+          "accuracy": 0.9745762711864406,
+          "alerts": 129,
+          "confusion_matrix": {
+            "tp": 70,
+            "fp": 59,
+            "fn": 4,
+            "tn": 2345
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.3049929237262559,
+            "median_over_true_alerts": 0.047619047619047616,
+            "share_of_true_alerts_before_block_end": 0.5142857142857142,
+            "expected_lead_per_alert": 0.16550003613052647
+          },
+          "caught": "caught 70 of 74"
+        },
+        "test_in_progress": {
+          "precision": 0.4864864864864865,
+          "recall": 0.9,
+          "f1": 0.631578947368421,
+          "false_alarm_rate": 0.7307692307692307,
+          "accuracy": 0.5434782608695652,
+          "alerts": 74,
+          "confusion_matrix": {
+            "tp": 36,
+            "fp": 38,
+            "fn": 4,
+            "tn": 14
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.5930417961343865,
+            "median_over_true_alerts": 0.7035573122529645,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.28850681974105286
+          },
+          "blocks": 92,
+          "anomalies": 40
+        },
+        "test_blocks_with_at_most_k_events": 2386
+      }
+    },
+    "trade_off": {
+      "split": "test",
+      "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+      "points": [
+        {
+          "k": 3,
+          "precision": 0.40336134453781514,
+          "mean_lead_over_true_alerts": 0.7992543721345496,
+          "expected_lead_per_alert": 0.32238831817191915,
+          "on_pareto_front": true
+        },
+        {
+          "k": 5,
+          "precision": 0.4492753623188406,
+          "mean_lead_over_true_alerts": 0.7174786150723566,
+          "expected_lead_per_alert": 0.32234546474265297,
+          "on_pareto_front": true
+        },
+        {
+          "k": 10,
+          "precision": 0.5377358490566038,
+          "mean_lead_over_true_alerts": 0.4453259925510573,
+          "expected_lead_per_alert": 0.23946775071141763,
+          "on_pareto_front": true
+        },
+        {
+          "k": 20,
+          "precision": 0.5426356589147286,
+          "mean_lead_over_true_alerts": 0.3049929237262559,
+          "expected_lead_per_alert": 0.16550003613052647,
+          "on_pareto_front": true
+        }
+      ],
+      "pareto_front": [
+        3,
+        5,
+        10,
+        20
+      ],
+      "best_k": 3
+    },
+    "trade_off_in_progress": {
+      "split": "test_in_progress",
+      "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+      "points": [
+        {
+          "k": 3,
+          "precision": 0.5161290322580645,
+          "mean_lead_over_true_alerts": 0.7992543721345496,
+          "expected_lead_per_alert": 0.41251838561783205,
+          "on_pareto_front": true
+        },
+        {
+          "k": 5,
+          "precision": 0.5585585585585585,
+          "mean_lead_over_true_alerts": 0.7174786150723566,
+          "expected_lead_per_alert": 0.4007538210314064,
+          "on_pareto_front": true
+        },
+        {
+          "k": 10,
+          "precision": 0.5421686746987951,
+          "mean_lead_over_true_alerts": 0.5640795905646726,
+          "expected_lead_per_alert": 0.3058262840410876,
+          "on_pareto_front": false
+        },
+        {
+          "k": 20,
+          "precision": 0.4864864864864865,
+          "mean_lead_over_true_alerts": 0.5930417961343865,
+          "expected_lead_per_alert": 0.28850681974105286,
+          "on_pareto_front": false
+        }
+      ],
+      "pareto_front": [
+        3,
+        5
+      ],
+      "best_k": 3
+    },
+    "scan": {
+      "rows": 38784,
+      "rows_skipped_no_block_id": 0,
+      "rows_out_of_time_order": 5180,
+      "chunks": 1,
+      "blocks": 8258,
+      "events": 38784
+    }
+  },
+  "paths": {
+    "models": "data/models/apache",
+    "metrics": "data/evaluation/apache_metrics",
+    "storage": "data/storage/apache",
+    "vocab": "data/features/apache/category_encoders.json",
+    "cleaned": "data/processed/apache/cleaned.csv"
+  },
+  "wall_clock_seconds": 31.1
+}

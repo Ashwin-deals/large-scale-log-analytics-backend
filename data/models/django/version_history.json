@@ -1,0 +1,16 @@
+[
+  {
+    "timestamp": "2026-11-12T07:12:04.727055+00:00",
+    "metric": "f1",
+    "promoted": true,
+    "current_version": 1,
+    "current_model_path": "data/models/django/isolation_forest_v1.pkl",
+    "current_metric_value": 0.15789473684210525,
+    "candidate_model_path": "data/models/django/isolation_forest_candidate.pkl",
+    "candidate_metric_value": 0.4358974358974359,
+    "new_version": 2,
+    "promoted_model_path": "data/models/django/isolation_forest_v2.pkl",
+    "promoted_metrics_path": "data/evaluation/django_metrics/isolation_forest_v2_metrics.json",
+    "archived_candidate_path": null
+  }
+]

@@ -11,6 +11,7 @@ import pandas as pd
 from flask import Blueprint, g, jsonify, request
 from pymongo.errors import PyMongoError
 
+import upload_store
 from auth import token_required
 from db import uploads
 
@@ -311,7 +312,7 @@ def latest_upload_view(email: str) -> dict | None:
     try:
         for doc in uploads.find({"uploaded_by": email, "status": "processed"}).sort("uploaded_at", -1).limit(10):
             blocks_path = UPLOAD_BLOCKS_DIR / f"{doc['_id']}_blocks.csv"
-            if blocks_path.exists():
+            if blocks_path.exists() and upload_store.results_path(doc["_id"], UPLOAD_BLOCKS_DIR).exists():
                 return {"id": str(doc["_id"]), "name": doc.get("name"),
                         "uploaded_at": doc["uploaded_at"].isoformat() if doc.get("uploaded_at") else None,
                         "blocks_path": blocks_path}
@@ -361,6 +362,12 @@ def dashboard():
     total_events = stats.get("total_events", 0) if upload_view else stats.get("total_events", 0) + uploaded_events
     total_blocks = len(predictions)
     anomalous = int((predictions["predicted_label"] == "Anomaly").sum())
+    if upload_view is not None:
+        # Same count Log Sources shows for this upload: both read it through
+        # upload_store from this server's results file.
+        counts = upload_store.result_counts(upload_view["id"], UPLOAD_BLOCKS_DIR)
+        if counts is not None:
+            total_blocks, anomalous = counts["blocks_analyzed"], counts["anomalies_detected"]
 
     cm = current_metrics.get("confusion_matrix")
     fp_rate = None

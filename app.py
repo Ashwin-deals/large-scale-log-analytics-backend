@@ -21,8 +21,11 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.exceptions import HTTPException
 
 from db import user_details
+from early_warning_api import early_warning_bp
 from pipeline_api import pipeline_bp
 from sources_api import MAX_UPLOAD_BYTES, sources_bp
+from storage_api import storage_bp
+from stream_api import stream_bp
 
 load_dotenv()
 
@@ -45,6 +48,9 @@ CORS(app, origins=CORS_ORIGINS, allow_headers=["Content-Type", "Authorization"])
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 app.register_blueprint(pipeline_bp)
 app.register_blueprint(sources_bp)
+app.register_blueprint(storage_bp)
+app.register_blueprint(early_warning_bp)
+app.register_blueprint(stream_bp)
 
 user_details.create_index("email", unique=True)
 

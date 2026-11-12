@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "model_path": "data/models/apache/isolation_forest_v2.pkl",
+  "metrics_path": "data/evaluation/apache_metrics/isolation_forest_v2_metrics.json",
+  "metric": "f1",
+  "metric_value": 0.7218934911242604,
+  "promoted_at": "2026-11-12T07:09:20.368182+00:00"
+}

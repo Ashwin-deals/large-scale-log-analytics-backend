@@ -25,3 +25,5 @@ db = client[MONGO_DB]
 
 user_details = db[MONGO_COLLECTION]
 uploads = db["uploads"]
+stream_alerts = db["stream_alerts"]
+stream_status = db["stream_status"]

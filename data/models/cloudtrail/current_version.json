@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "model_path": "data/models/cloudtrail/isolation_forest_v2.pkl",
+  "metrics_path": "data/evaluation/cloudtrail_metrics/isolation_forest_v2_metrics.json",
+  "metric": "f1",
+  "metric_value": 0.6150793650793651,
+  "promoted_at": "2026-11-12T07:11:37.764244+00:00"
+}

@@ -3,7 +3,7 @@ from pathlib import Path
 import joblib
 from sklearn.ensemble import IsolationForest
 
-from feature_engineering.category_encoder import CategoryEncoder
+from feature_engineering.category_encoder import DEFAULT_VOCAB_PATH, CategoryEncoder
 from feature_engineering.feature_extractor import FEATURE_COLUMNS
 
 EXCLUDED_FEATURE_COLUMNS = ["is_error"]
@@ -23,14 +23,15 @@ def build_isolation_forest() -> IsolationForest:
     return IsolationForest(n_jobs=-1, random_state=RANDOM_STATE)
 
 
-def save_model(model, model_path: str | Path):
+def save_model(model, model_path: str | Path, vocab_path: str | Path = DEFAULT_VOCAB_PATH):
     """Persist a fitted model together with the vocabulary it was trained on.
 
     Every save goes through here so a model can never reach disk without the
     fingerprint that lets inference verify the feature codes still mean the
-    same thing.
+    same thing. vocab_path defaults to the HDFS vocabulary; another log
+    source passes its own (multi_source/), so its codes never touch HDFS's.
     """
-    encoder = CategoryEncoder.load()
+    encoder = CategoryEncoder.load(vocab_path)
     # The vocabulary itself, not just its hash: inference needs the individual
     # codes to tell a harmless append from a breaking renumber.
     model.encoder_vocab_ = encoder.vocab

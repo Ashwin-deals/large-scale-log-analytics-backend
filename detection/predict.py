@@ -4,14 +4,14 @@ from pathlib import Path
 import pandas as pd
 
 from detection.isolation_forest import TRAINING_FEATURE_COLUMNS
-from feature_engineering.category_encoder import CategoryEncoder
+from feature_engineering.category_encoder import DEFAULT_VOCAB_PATH, CategoryEncoder
 
 DEFAULT_PREDICTIONS_PATH = Path("data/predictions/isolation_forest_v1_predictions.csv")
 
 RAW_PREDICTION_LABELS = {1: "Normal", -1: "Anomaly"}
 
 
-def check_encoder_compatibility(model) -> None:
+def check_encoder_compatibility(model, vocab_path: str | Path = DEFAULT_VOCAB_PATH, require_vocab: bool = False) -> None:
     """Refuse to score against a vocabulary the model wasn't trained on.
 
     Categorical codes are only meaningful relative to the vocabulary that
@@ -20,6 +20,13 @@ def check_encoder_compatibility(model) -> None:
     dashboard came to report half of all blocks as anomalous.
     """
     trained_vocab = getattr(model, "encoder_vocab_", None)
+    if trained_vocab is None and require_vocab:
+        # Uploads opt into this: an unverifiable model is how the same file got
+        # a different anomaly count on a different server (upload_store.py).
+        raise ValueError(
+            "Model has no encoder vocabulary, so its predictions cannot be verified against the current features. "
+            "Refit it (scripts/refit_models.py) before scoring uploads with it."
+        )
     if trained_vocab is None:
         warnings.warn(
             "Model has no encoder vocabulary — it predates stable category "
@@ -33,7 +40,7 @@ def check_encoder_compatibility(model) -> None:
     # Only renumbering invalidates a model. New values appended by, say, an
     # uploaded log carrying an unseen host are harmless and must not block
     # inference, so compare code-by-code rather than by whole-vocabulary hash.
-    conflicts = CategoryEncoder.load().conflicts_with(trained_vocab)
+    conflicts = CategoryEncoder.load(vocab_path).conflicts_with(trained_vocab)
     if conflicts:
         shown = "; ".join(conflicts[:3])
         more = f" (+{len(conflicts) - 3} more)" if len(conflicts) > 3 else ""
@@ -50,6 +57,8 @@ def predict(
     merged: pd.DataFrame,
     output_path: str | Path = DEFAULT_PREDICTIONS_PATH,
     feature_columns: list[str] = TRAINING_FEATURE_COLUMNS,
+    vocab_path: str | Path = DEFAULT_VOCAB_PATH,
+    require_encoder_vocab: bool = False,
 ) -> pd.DataFrame:
     """
     Generates a Normal/Anomaly prediction and an anomaly score for every
@@ -61,7 +70,7 @@ def predict(
     has it (via load_labeled_features's join against anomaly_label.csv), but
     real inference on a freshly uploaded, unlabeled log does not.
     """
-    check_encoder_compatibility(model)
+    check_encoder_compatibility(model, vocab_path, require_vocab=require_encoder_vocab)
 
     inference_matrix = merged[feature_columns]
     raw_predictions = model.predict(inference_matrix)

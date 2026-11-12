@@ -1,0 +1,812 @@
+{
+  "source": "openstack",
+  "title": "OpenStack (nova)",
+  "generated_at": "2026-11-12T12:49:31+0530",
+  "data_kind": "real",
+  "label_kind": "by source file (session-level)",
+  "label_description": "A block (one instance-id session) is Anomaly if the instance appears in openstack_abnormal.log (the LogHub abnormal run) and Normal if it appears in openstack_normal1/2.log. No instance appears in more than one file.",
+  "synthetic": false,
+  "injected": false,
+  "weak_labels": false,
+  "warnings": [
+    "Labels mark which run a session came from, not which session had a fault: the dataset's own anomaly_labels.txt lists only 4 of the abnormal run's instances as injected with faults. The other abnormal-run sessions are labeled Anomaly here although the dataset calls them normal. See ground_truth_check for the 4.",
+    "The abnormal run is a different day (2017-05-14) from the normal runs (2017-05-16/17), so a model can separate runs by time-of-day or workload differences rather than faults; see feature_separability (single-feature AUC).",
+    "The shared HDFSDataCleaner removed 1,878 exact-duplicate rows (3.6% of recognized lines). At 1-second resolution, identical lines repeated within the same second count as one event, so per-block event counts here understate bursts of repeated lines."
+  ],
+  "block_definition": "VM instance UUID from '[instance: <uuid>]' (one session); lines without an instance id are dropped.",
+  "evaluation_protocol": "stratified 70/30 train/test; all metrics on test",
+  "ingest": {
+    "input_files": [
+      "data/raw/openstack/openstack_abnormal.log",
+      "data/raw/openstack/openstack_normal1.log",
+      "data/raw/openstack/openstack_normal2.log"
+    ],
+    "lines_or_records": 207820,
+    "unparsed": 184,
+    "no_block_id": 156083,
+    "recognized": 51553,
+    "events_after_cleaning": 49675,
+    "dropped_by_cleaner": 1878,
+    "blocks": 2069
+  },
+  "labels": {
+    "blocks": 2069,
+    "anomalies": 198,
+    "anomaly_rate": 0.09569840502658289,
+    "rule": "Anomaly = instance session found in openstack_abnormal.log; Normal = found in openstack_normal1/2.log",
+    "sessions_in_abnormal_run": 198,
+    "ground_truth_faulty_instances": [
+      "1643649d-2f42-4303-bfcd-7798baec19f9",
+      "544fd51c-4edc-4780-baae-ba1d80a0acfc",
+      "a445709b-6ad0-40ec-8860-bec60b6ca0c2",
+      "ae651dff-c7ad-43d6-ac96-bbcd820ccca8"
+    ],
+    "blocks_without_a_label_treated_normal": 0
+  },
+  "split": {
+    "train_blocks": 1448,
+    "test_blocks": 621,
+    "test_anomalies": 59
+  },
+  "features": [
+    "hour_of_day",
+    "component_encoded",
+    "event_type_encoded",
+    "block_size",
+    "event_frequency",
+    "source_ip_encoded",
+    "destination_ip_encoded"
+  ],
+  "feature_separability": {
+    "hour_of_day": 0.8489,
+    "component_encoded": 0.502,
+    "event_type_encoded": 0.5005,
+    "block_size": 0.5,
+    "event_frequency": 0.5095,
+    "source_ip_encoded": 0.5,
+    "destination_ip_encoded": 0.5
+  },
+  "models": {
+    "v1_baseline": {
+      "accuracy": 0.6892109500805152,
+      "precision": 0.0759493670886076,
+      "recall": 0.2033898305084746,
+      "f1": 0.11059907834101383,
+      "confusion_matrix": {
+        "labels": [
+          "Normal",
+          "Anomaly"
+        ],
+        "matrix": [
+          [
+            416,
+            146
+          ],
+          [
+            47,
+            12
+          ]
+        ]
+      },
+      "support": {
+        "total": 621,
+        "normal": 562,
+        "anomaly": 59
+      },
+      "caught": "caught 12 of 59"
+    },
+    "ga_candidate": {
+      "accuracy": 0.7584541062801933,
+      "precision": 0.10434782608695652,
+      "recall": 0.2033898305084746,
+      "f1": 0.13793103448275862,
+      "confusion_matrix": {
+        "labels": [
+          "Normal",
+          "Anomaly"
+        ],
+        "matrix": [
+          [
+            459,
+            103
+          ],
+          [
+            47,
+            12
+          ]
+        ]
+      },
+      "support": {
+        "total": 621,
+        "normal": 562,
+        "anomaly": 59
+      },
+      "caught": "caught 12 of 59",
+      "chromosome": {
+        "selected_features": [
+          "hour_of_day",
+          "block_size",
+          "event_frequency",
+          "source_ip_encoded",
+          "destination_ip_encoded"
+        ],
+        "feature_mask": {
+          "hour_of_day": 1,
+          "component_encoded": 0,
+          "event_type_encoded": 0,
+          "block_size": 1,
+          "event_frequency": 1,
+          "source_ip_encoded": 1,
+          "destination_ip_encoded": 1
+        },
+        "n_estimators": 175,
+        "max_samples": 0.34421412859650635,
+        "max_features": 0.9961202238275745,
+        "contamination": 0.18743733946949004,
+        "bootstrap": false
+      },
+      "ga_best_fitness": 0.15841584158415842,
+      "ga_generations": 12,
+      "ga_seconds": 17.058360625000205
+    },
+    "promotion": {
+      "timestamp": "2026-11-12T07:19:30.104759+00:00",
+      "metric": "f1",
+      "promoted": true,
+      "current_version": 1,
+      "current_model_path": "data/models/openstack/isolation_forest_v1.pkl",
+      "current_metric_value": 0.11059907834101383,
+      "candidate_model_path": "data/models/openstack/isolation_forest_candidate.pkl",
+      "candidate_metric_value": 0.13793103448275862,
+      "new_version": 2,
+      "promoted_model_path": "data/models/openstack/isolation_forest_v2.pkl",
+      "promoted_metrics_path": "data/evaluation/openstack_metrics/isolation_forest_v2_metrics.json",
+      "archived_candidate_path": null
+    },
+    "deployed": {
+      "version": 2,
+      "model_path": "data/models/openstack/isolation_forest_v2.pkl",
+      "f1": 0.13793103448275862
+    }
+  },
+  "smart_storage": {
+    "protocol": "50/50 stratified tune/holdout",
+    "policy": {
+      "weights": {
+        "anomaly_score": 0.04040718561525823,
+        "event_frequency": 0.6244446766013269,
+        "block_size": 0.3351481377834149
+      },
+      "error_weight": 0.2,
+      "thresholds": {
+        "hot": 0.5872111453599953,
+        "warm": 0.24763434915015498
+      },
+      "summary_fraction": 0.0295620409562381
+    },
+    "holdout": {
+      "storage_saved_pct": 31.421888862004998,
+      "weighted_retention": 0.9292929292929293,
+      "full_retention": 0.8686868686868687,
+      "coverage": 0.98989898989899,
+      "fitness": 10.714818154934324,
+      "meets_retention_target": false,
+      "tier_counts": {
+        "HOT": 689,
+        "WARM": 344,
+        "COLD": 2
+      },
+      "tier_anomalies": {
+        "HOT": 86,
+        "WARM": 12,
+        "COLD": 1
+      },
+      "n_blocks": 1035,
+      "n_anomalies": 99
+    },
+    "baselines_on_holdout": {
+      "keep_all": {
+        "storage_saved_pct": 0.0,
+        "weighted_retention": 1.0,
+        "full_retention": 1.0,
+        "coverage": 1.0,
+        "fitness": 0.0,
+        "meets_retention_target": true
+      },
+      "keep_flagged_only": {
+        "storage_saved_pct": 76.45777885313332,
+        "weighted_retention": 0.23232323232323232,
+        "full_retention": 0.23232323232323232,
+        "coverage": 0.23232323232323232,
+        "fitness": -641.2189888236344,
+        "meets_retention_target": false
+      },
+      "top_k_percent_tuned": {
+        "storage_saved_pct": 31.163803532542943,
+        "weighted_retention": 0.6363636363636364,
+        "full_retention": 0.6363636363636364,
+        "coverage": 0.6363636363636364,
+        "fitness": -282.4725601038207,
+        "meets_retention_target": false
+      },
+      "top_k_percent_same_savings": {
+        "storage_saved_pct": 31.44205177836923,
+        "weighted_retention": 0.6363636363636364,
+        "full_retention": 0.6363636363636364,
+        "coverage": 0.6363636363636364,
+        "fitness": -282.1943118579944,
+        "meets_retention_target": false
+      },
+      "random_sampling_same_savings": {
+        "storage_saved_pct": 31.419066053714015,
+        "weighted_retention": 0.6757575757575758,
+        "full_retention": 0.6757575757575758,
+        "coverage": 0.6757575757575758,
+        "fitness": -242.8233581887102,
+        "meets_retention_target": false
+      }
+    },
+    "ga_beats_baselines": true,
+    "policy_path": "data/storage/openstack/policy_best.json"
+  },
+  "early_warning": {
+    "ks": [
+      3,
+      5,
+      10,
+      20
+    ],
+    "blocks": 2069,
+    "median_events_per_block": 24.0,
+    "results": {
+      "3": {
+        "k": 3,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_Attempting claim: memory <n> MB, disk <n> GB, vcpus <n> CPU",
+          "count_Creating image",
+          "count_During sync_power_state the instance has a pending task (spawning). Skip.",
+          "count_Total memory: <n> MB, used: <n>.<n> MB",
+          "count_VM Paused (Lifecycle Event)",
+          "count_VM Started (Lifecycle Event)",
+          "count_VM Stopped (Lifecycle Event)",
+          "count_memory limit: <n>.<n> MB, free: <n>.<n> MB"
+        ],
+        "dropped_constant_columns": [
+          "warn_count",
+          "error_count",
+          "block_size_max",
+          "count_Claim successful",
+          "count_Deleting instance files <path>",
+          "count_Deletion of <path> complete",
+          "count_During sync_power_state the instance has a pending task (deleting). Skip.",
+          "count_During sync_power_state the instance has a pending task (networking). Skip.",
+          "count_Instance destroyed successfully.",
+          "count_Instance spawned successfully.",
+          "count_Terminating instance",
+          "count_Took <n>.<n> seconds to build instance.",
+          "count_Took <n>.<n> seconds to deallocate network for instance.",
+          "count_Took <n>.<n> seconds to destroy the instance on the hypervisor.",
+          "count_Took <n>.<n> seconds to spawn the instance on the hypervisor.",
+          "count_Total disk: <n> GB, used: <n>.<n> GB",
+          "count_Total vcpu: <n> VCPU, used: <n>.<n> VCPU",
+          "count_VM Resumed (Lifecycle Event)",
+          "count_disk limit not specified, defaulting to unlimited",
+          "count_vcpu limit not specified, defaulting to unlimited"
+        ],
+        "threshold": {
+          "alert_quantile": 0.8027842299082146,
+          "score_threshold": 0.47292365871443776,
+          "train_f1": 0.1751732829237555
+        },
+        "train": {
+          "precision": 0.09599447513812155,
+          "recall": 1.0,
+          "f1": 0.1751732829237555,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09599447513812155,
+          "alerts": 1448,
+          "confusion_matrix": {
+            "tp": 139,
+            "fp": 1309,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.874914763841101,
+            "median_over_true_alerts": 0.875,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.08398698354552005
+          }
+        },
+        "test": {
+          "precision": 0.09500805152979067,
+          "recall": 1.0,
+          "f1": 0.1735294117647059,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09500805152979067,
+          "alerts": 621,
+          "confusion_matrix": {
+            "tp": 59,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.8590834019680089,
+            "median_over_true_alerts": 0.875,
+            "share_of_true_alerts_before_block_end": 0.9830508474576272,
+            "expected_lead_per_alert": 0.08161984012256446
+          },
+          "caught": "caught 59 of 59"
+        },
+        "test_in_progress": {
+          "precision": 0.0935483870967742,
+          "recall": 1.0,
+          "f1": 0.1710914454277286,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.0935483870967742,
+          "alerts": 620,
+          "confusion_matrix": {
+            "tp": 58,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.8738951847605608,
+            "median_over_true_alerts": 0.875,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.08175148502598795
+          },
+          "blocks": 620,
+          "anomalies": 58
+        },
+        "test_blocks_with_at_most_k_events": 1
+      },
+      "5": {
+        "k": 5,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_Attempting claim: memory <n> MB, disk <n> GB, vcpus <n> CPU",
+          "count_Creating image",
+          "count_During sync_power_state the instance has a pending task (spawning). Skip.",
+          "count_Instance spawned successfully.",
+          "count_Total disk: <n> GB, used: <n>.<n> GB",
+          "count_Total memory: <n> MB, used: <n>.<n> MB",
+          "count_VM Paused (Lifecycle Event)",
+          "count_VM Resumed (Lifecycle Event)",
+          "count_VM Started (Lifecycle Event)",
+          "count_VM Stopped (Lifecycle Event)",
+          "count_disk limit not specified, defaulting to unlimited",
+          "count_memory limit: <n>.<n> MB, free: <n>.<n> MB"
+        ],
+        "dropped_constant_columns": [
+          "warn_count",
+          "error_count",
+          "block_size_max",
+          "count_Claim successful",
+          "count_Deleting instance files <path>",
+          "count_Deletion of <path> complete",
+          "count_During sync_power_state the instance has a pending task (deleting). Skip.",
+          "count_During sync_power_state the instance has a pending task (networking). Skip.",
+          "count_Instance destroyed successfully.",
+          "count_Terminating instance",
+          "count_Took <n>.<n> seconds to build instance.",
+          "count_Took <n>.<n> seconds to deallocate network for instance.",
+          "count_Took <n>.<n> seconds to destroy the instance on the hypervisor.",
+          "count_Took <n>.<n> seconds to spawn the instance on the hypervisor.",
+          "count_Total vcpu: <n> VCPU, used: <n>.<n> VCPU",
+          "count_vcpu limit not specified, defaulting to unlimited"
+        ],
+        "threshold": {
+          "alert_quantile": 0.8027842299082146,
+          "score_threshold": 0.46637078397747694,
+          "train_f1": 0.1751732829237555
+        },
+        "train": {
+          "precision": 0.09599447513812155,
+          "recall": 1.0,
+          "f1": 0.1751732829237555,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09599447513812155,
+          "alerts": 1448,
+          "confusion_matrix": {
+            "tp": 139,
+            "fp": 1309,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7915246064018351,
+            "median_over_true_alerts": 0.7916666666666666,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.0759819891504524
+          }
+        },
+        "test": {
+          "precision": 0.09500805152979067,
+          "recall": 1.0,
+          "f1": 0.1735294117647059,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09500805152979067,
+          "alerts": 621,
+          "confusion_matrix": {
+            "tp": 59,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.7764384383082634,
+            "median_over_true_alerts": 0.7916666666666666,
+            "share_of_true_alerts_before_block_end": 0.9830508474576272,
+            "expected_lead_per_alert": 0.07376790315650168
+          },
+          "caught": "caught 59 of 59"
+        },
+        "test_in_progress": {
+          "precision": 0.0935483870967742,
+          "recall": 1.0,
+          "f1": 0.1710914454277286,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.0935483870967742,
+          "alerts": 620,
+          "confusion_matrix": {
+            "tp": 58,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.789825307934268,
+            "median_over_true_alerts": 0.7916666666666666,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.07388688364546378
+          },
+          "blocks": 620,
+          "anomalies": 58
+        },
+        "test_blocks_with_at_most_k_events": 1
+      },
+      "10": {
+        "k": 10,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_Attempting claim: memory <n> MB, disk <n> GB, vcpus <n> CPU",
+          "count_Claim successful",
+          "count_Creating image",
+          "count_During sync_power_state the instance has a pending task (spawning). Skip.",
+          "count_Instance destroyed successfully.",
+          "count_Instance spawned successfully.",
+          "count_Terminating instance",
+          "count_Took <n>.<n> seconds to build instance.",
+          "count_Took <n>.<n> seconds to deallocate network for instance.",
+          "count_Took <n>.<n> seconds to spawn the instance on the hypervisor.",
+          "count_Total disk: <n> GB, used: <n>.<n> GB",
+          "count_Total memory: <n> MB, used: <n>.<n> MB",
+          "count_Total vcpu: <n> VCPU, used: <n>.<n> VCPU",
+          "count_VM Paused (Lifecycle Event)",
+          "count_VM Resumed (Lifecycle Event)",
+          "count_VM Started (Lifecycle Event)",
+          "count_VM Stopped (Lifecycle Event)",
+          "count_disk limit not specified, defaulting to unlimited",
+          "count_memory limit: <n>.<n> MB, free: <n>.<n> MB",
+          "count_vcpu limit not specified, defaulting to unlimited"
+        ],
+        "dropped_constant_columns": [
+          "warn_count",
+          "error_count",
+          "block_size_max",
+          "count_Deleting instance files <path>",
+          "count_Deletion of <path> complete",
+          "count_During sync_power_state the instance has a pending task (deleting). Skip.",
+          "count_During sync_power_state the instance has a pending task (networking). Skip.",
+          "count_Took <n>.<n> seconds to destroy the instance on the hypervisor."
+        ],
+        "threshold": {
+          "alert_quantile": 0.5645151278681717,
+          "score_threshold": 0.4190458750420597,
+          "train_f1": 0.1751732829237555
+        },
+        "train": {
+          "precision": 0.09599447513812155,
+          "recall": 1.0,
+          "f1": 0.1751732829237555,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09599447513812155,
+          "alerts": 1448,
+          "confusion_matrix": {
+            "tp": 139,
+            "fp": 1309,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.5830492128036702,
+            "median_over_true_alerts": 0.5833333333333334,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.05596950316278325
+          }
+        },
+        "test": {
+          "precision": 0.09500805152979067,
+          "recall": 1.0,
+          "f1": 0.1735294117647059,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.09500805152979067,
+          "alerts": 621,
+          "confusion_matrix": {
+            "tp": 59,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.5698260291589003,
+            "median_over_true_alerts": 0.5833333333333334,
+            "share_of_true_alerts_before_block_end": 0.9830508474576272,
+            "expected_lead_per_alert": 0.05413806074134479
+          },
+          "caught": "caught 59 of 59"
+        },
+        "test_in_progress": {
+          "precision": 0.0935483870967742,
+          "recall": 1.0,
+          "f1": 0.1710914454277286,
+          "false_alarm_rate": 1.0,
+          "accuracy": 0.0935483870967742,
+          "alerts": 620,
+          "confusion_matrix": {
+            "tp": 58,
+            "fp": 562,
+            "fn": 0,
+            "tn": 0
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.5796506158685365,
+            "median_over_true_alerts": 0.5833333333333334,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.05422538019415342
+          },
+          "blocks": 620,
+          "anomalies": 58
+        },
+        "test_blocks_with_at_most_k_events": 1
+      },
+      "20": {
+        "k": 20,
+        "features": [
+          "n_events",
+          "elapsed_seconds",
+          "distinct_event_types",
+          "distinct_components",
+          "first_component_encoded",
+          "first_event_type_encoded",
+          "dominant_component_encoded",
+          "dominant_event_type_encoded",
+          "count_Attempting claim: memory <n> MB, disk <n> GB, vcpus <n> CPU",
+          "count_Claim successful",
+          "count_Creating image",
+          "count_Deleting instance files <path>",
+          "count_Deletion of <path> complete",
+          "count_During sync_power_state the instance has a pending task (networking). Skip.",
+          "count_During sync_power_state the instance has a pending task (spawning). Skip.",
+          "count_Instance destroyed successfully.",
+          "count_Instance spawned successfully.",
+          "count_Terminating instance",
+          "count_Took <n>.<n> seconds to build instance.",
+          "count_Took <n>.<n> seconds to deallocate network for instance.",
+          "count_Took <n>.<n> seconds to destroy the instance on the hypervisor.",
+          "count_Took <n>.<n> seconds to spawn the instance on the hypervisor.",
+          "count_Total disk: <n> GB, used: <n>.<n> GB",
+          "count_Total memory: <n> MB, used: <n>.<n> MB",
+          "count_Total vcpu: <n> VCPU, used: <n>.<n> VCPU",
+          "count_VM Paused (Lifecycle Event)",
+          "count_VM Resumed (Lifecycle Event)",
+          "count_VM Started (Lifecycle Event)",
+          "count_VM Stopped (Lifecycle Event)",
+          "count_disk limit not specified, defaulting to unlimited",
+          "count_memory limit: <n>.<n> MB, free: <n>.<n> MB",
+          "count_vcpu limit not specified, defaulting to unlimited"
+        ],
+        "dropped_constant_columns": [
+          "warn_count",
+          "error_count",
+          "block_size_max",
+          "count_During sync_power_state the instance has a pending task (deleting). Skip."
+        ],
+        "threshold": {
+          "alert_quantile": 0.5645151278681717,
+          "score_threshold": 0.4089497207135713,
+          "train_f1": 0.1722488038277512
+        },
+        "train": {
+          "precision": 0.10329985652797705,
+          "recall": 0.5179856115107914,
+          "f1": 0.1722488038277512,
+          "false_alarm_rate": 0.4774637127578304,
+          "accuracy": 0.5220994475138122,
+          "alerts": 697,
+          "confusion_matrix": {
+            "tp": 72,
+            "fp": 625,
+            "fn": 67,
+            "tn": 684
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.16904186795491144,
+            "median_over_true_alerts": 0.16666666666666666,
+            "share_of_true_alerts_before_block_end": 0.9861111111111112,
+            "expected_lead_per_alert": 0.017462000706963594
+          }
+        },
+        "test": {
+          "precision": 0.1054421768707483,
+          "recall": 0.5254237288135594,
+          "f1": 0.1756373937677054,
+          "false_alarm_rate": 0.4679715302491103,
+          "accuracy": 0.5314009661835749,
+          "alerts": 294,
+          "confusion_matrix": {
+            "tp": 31,
+            "fp": 263,
+            "fn": 28,
+            "tn": 299
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.15320243104254325,
+            "median_over_true_alerts": 0.16666666666666666,
+            "share_of_true_alerts_before_block_end": 0.9354838709677419,
+            "expected_lead_per_alert": 0.016153997831016464
+          },
+          "caught": "caught 31 of 59"
+        },
+        "test_in_progress": {
+          "precision": 0.09965635738831616,
+          "recall": 0.5087719298245614,
+          "f1": 0.16666666666666669,
+          "false_alarm_rate": 0.46702317290552586,
+          "accuracy": 0.5307443365695793,
+          "alerts": 291,
+          "confusion_matrix": {
+            "tp": 29,
+            "fp": 262,
+            "fn": 28,
+            "tn": 299
+          },
+          "lead_time": {
+            "mean_over_true_alerts": 0.16376811594202897,
+            "median_over_true_alerts": 0.16666666666666666,
+            "share_of_true_alerts_before_block_end": 1.0,
+            "expected_lead_per_alert": 0.016320533891130036
+          },
+          "blocks": 618,
+          "anomalies": 57
+        },
+        "test_blocks_with_at_most_k_events": 3
+      }
+    },
+    "trade_off": {
+      "split": "test",
+      "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+      "points": [
+        {
+          "k": 3,
+          "precision": 0.09500805152979067,
+          "mean_lead_over_true_alerts": 0.8590834019680089,
+          "expected_lead_per_alert": 0.08161984012256446,
+          "on_pareto_front": true
+        },
+        {
+          "k": 5,
+          "precision": 0.09500805152979067,
+          "mean_lead_over_true_alerts": 0.7764384383082634,
+          "expected_lead_per_alert": 0.07376790315650168,
+          "on_pareto_front": false
+        },
+        {
+          "k": 10,
+          "precision": 0.09500805152979067,
+          "mean_lead_over_true_alerts": 0.5698260291589003,
+          "expected_lead_per_alert": 0.05413806074134479,
+          "on_pareto_front": false
+        },
+        {
+          "k": 20,
+          "precision": 0.1054421768707483,
+          "mean_lead_over_true_alerts": 0.15320243104254325,
+          "expected_lead_per_alert": 0.016153997831016464,
+          "on_pareto_front": true
+        }
+      ],
+      "pareto_front": [
+        3,
+        20
+      ],
+      "best_k": 3
+    },
+    "trade_off_in_progress": {
+      "split": "test_in_progress",
+      "criterion": "Pareto front on (test precision, mean lead over true alerts); best = highest expected_lead_per_alert (precision x mean true-alert lead) on the front",
+      "points": [
+        {
+          "k": 3,
+          "precision": 0.0935483870967742,
+          "mean_lead_over_true_alerts": 0.8738951847605608,
+          "expected_lead_per_alert": 0.08175148502598795,
+          "on_pareto_front": true
+        },
+        {
+          "k": 5,
+          "precision": 0.0935483870967742,
+          "mean_lead_over_true_alerts": 0.789825307934268,
+          "expected_lead_per_alert": 0.07388688364546378,
+          "on_pareto_front": false
+        },
+        {
+          "k": 10,
+          "precision": 0.0935483870967742,
+          "mean_lead_over_true_alerts": 0.5796506158685365,
+          "expected_lead_per_alert": 0.05422538019415342,
+          "on_pareto_front": false
+        },
+        {
+          "k": 20,
+          "precision": 0.09965635738831616,
+          "mean_lead_over_true_alerts": 0.16376811594202897,
+          "expected_lead_per_alert": 0.016320533891130036,
+          "on_pareto_front": true
+        }
+      ],
+      "pareto_front": [
+        3,
+        20
+      ],
+      "best_k": 3
+    },
+    "scan": {
+      "rows": 49675,
+      "rows_skipped_no_block_id": 0,
+      "rows_out_of_time_order": 0,
+      "chunks": 1,
+      "blocks": 2069,
+      "events": 49675
+    }
+  },
+  "paths": {
+    "models": "data/models/openstack",
+    "metrics": "data/evaluation/openstack_metrics",
+    "storage": "data/storage/openstack",
+    "vocab": "data/features/openstack/category_encoders.json",
+    "cleaned": "data/processed/openstack/cleaned.csv"
+  },
+  "wall_clock_seconds": 22.9,
+  "ground_truth_check": {
+    "faulty_instances_present": 4,
+    "caught": "caught 0 of 4",
+    "flagged_overall": 380,
+    "note": "In-sample over every block (the 4 are too few to hold out). Diagnostic only, not the training target."
+  }
+}

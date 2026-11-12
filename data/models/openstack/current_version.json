@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "model_path": "data/models/openstack/isolation_forest_v2.pkl",
+  "metrics_path": "data/evaluation/openstack_metrics/isolation_forest_v2_metrics.json",
+  "metric": "f1",
+  "metric_value": 0.13793103448275862,
+  "promoted_at": "2026-11-12T07:19:30.104759+00:00"
+}

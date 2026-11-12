@@ -10,6 +10,11 @@ extract-features -> predict pipeline as the base HDFS dataset, scored
 against whichever model is currently deployed. There's no per-account
 retraining yet (the base dataset is still the one shared training set); this
 only wires up real *inference* on a user's own file. See _score_upload.
+
+An upload's `source` form field picks the log type (default "hdfs"):
+openstack / apache / cloudtrail / django use that source's parser,
+vocabulary and deployed model (multi_source/upload.py), and their blocks are
+never folded into the HDFS dashboard totals.
 """
 
 import threading
@@ -25,19 +30,23 @@ from werkzeug.utils import secure_filename
 
 from auth import token_required
 from db import uploads
+import upload_store
 from detection.predict import predict
+from feature_engineering.category_encoder import DEFAULT_VOCAB_PATH
 from feature_engineering.data_cleaner import HDFSDataCleaner
 from feature_engineering.feature_extractor import HDFSFeatureExtractor
 from parser.hdfs_parser import HDFSParser
+from multi_source import upload as multi_source_upload
 from pipeline_api import resolve_current_deployment
 
 sources_bp = Blueprint("sources", __name__)
 
 UPLOAD_PROCESSED_DIR = Path("data/uploads/processed")
-UPLOAD_RESULTS_DIR = Path("data/uploads/results")
+UPLOAD_RESULTS_DIR = upload_store.RESULTS_DIR
+VOCAB_PATH = DEFAULT_VOCAB_PATH
 
 UPLOAD_DIR = Path("data/uploads")
-ALLOWED_EXTENSIONS = {".log", ".json", ".csv", ".txt"}
+ALLOWED_EXTENSIONS = {".log", ".json", ".csv", ".txt", ".gz"}  # .gz: CloudTrail .json.gz
 MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # matches the 500MB the upload UI advertises
 
 # Connectors are declared here rather than in the dashboard so the "not
@@ -53,10 +62,26 @@ CONNECTORS = [
 
 
 def _serialize(doc):
+    serialized = _serialize_fields(doc)
+    if serialized["status"] == "processed":
+        # The count comes from this server's results file, the same place the
+        # dashboard reads it, never from the number stored on the doc.
+        counts = upload_store.result_counts(doc["_id"], UPLOAD_RESULTS_DIR)
+        serialized["results_available"] = counts is not None
+        if counts is None:
+            serialized.update({"blocks_analyzed": None, "anomalies_detected": None, "anomaly_rate_pct": None,
+                               "results_note": upload_store.NOT_ON_THIS_SERVER})
+        else:
+            serialized.update(counts)
+    return serialized
+
+
+def _serialize_fields(doc):
     return {
         "id": str(doc["_id"]),
         "name": doc.get("name"),
         "source": doc.get("source", "Manual Upload"),
+        "log_source": doc.get("log_source", "hdfs"),
         "size_bytes": doc.get("size_bytes", 0),
         "records": doc.get("records"),
         "total_lines": doc.get("total_lines"),
@@ -66,6 +91,7 @@ def _serialize(doc):
         "anomalies_detected": doc.get("anomalies_detected"),
         "anomaly_rate_pct": doc.get("anomaly_rate_pct"),
         "model_version": doc.get("model_version"),
+        "scoring": doc.get("scoring"),
         "uploaded_at": doc["uploaded_at"].isoformat() if doc.get("uploaded_at") else None,
         "uploaded_by": doc.get("uploaded_by"),
     }
@@ -129,20 +155,25 @@ def _score_upload(recognized_frame: pd.DataFrame, upload_id) -> dict:
     UPLOAD_PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     UPLOAD_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Refuse before extracting: without the persisted vocabulary the extractor
+    # would assign fresh codes and write them to disk (see upload_store.py).
+    upload_store.require_vocabulary(VOCAB_PATH)
+    current = resolve_current_deployment()
+    model = joblib.load(current["model_path"])
+
     cleaned = HDFSDataCleaner().clean(recognized_frame, UPLOAD_PROCESSED_DIR / f"{upload_id}_cleaned.csv")
     features_path = UPLOAD_PROCESSED_DIR / f"{upload_id}_features.csv"
-    HDFSFeatureExtractor().extract(cleaned, features_path)
+    HDFSFeatureExtractor().extract(cleaned, features_path, vocab_path=VOCAB_PATH)
     features = pd.read_csv(features_path)
 
     if len(features) == 0:
         return {"blocks_analyzed": 0}
 
-    current = resolve_current_deployment()
-    model = joblib.load(current["model_path"])
     feature_columns = list(model.feature_names_in_)
 
-    results_path = UPLOAD_RESULTS_DIR / f"{upload_id}.csv"
-    predictions = predict(model, features, output_path=results_path, feature_columns=feature_columns)
+    results_path = upload_store.results_path(upload_id, UPLOAD_RESULTS_DIR)
+    predictions = predict(model, features, output_path=results_path, feature_columns=feature_columns,
+                          vocab_path=VOCAB_PATH, require_encoder_vocab=True)
 
     # Written last: pipeline_api.py treats the presence of this file as "this
     # upload is ready to count", so it must not appear before the predictions
@@ -157,10 +188,39 @@ def _score_upload(recognized_frame: pd.DataFrame, upload_id) -> dict:
         "anomalies_detected": anomalies,
         "anomaly_rate_pct": round(anomalies / total * 100, 2) if total else 0.0,
         "model_version": current.get("version"),
+        "scoring": upload_store.scoring_provenance(model, current, VOCAB_PATH),
     }
 
 
-def _process_upload(upload_id, stored_path):
+def _process_other_source(upload_id, stored_path, log_source):
+    """Non-HDFS upload: that source's parser, vocabulary and model. No
+    <id>_blocks.csv is written, so nothing joins the HDFS dashboard totals."""
+    try:
+        frame = multi_source_upload.parse_upload(log_source, stored_path)
+        total_lines = int(len(frame))
+        mask = multi_source_upload.recognized_mask(frame)
+        recognized = int(mask.sum())
+        if recognized == 0:
+            update = {"status": "failed", "records": 0, "total_lines": total_lines,
+                      "error": f"No lines matched the {log_source} log format."}
+        else:
+            summary = multi_source_upload.score_upload(
+                log_source, frame[mask].reset_index(drop=True), upload_id, UPLOAD_PROCESSED_DIR, UPLOAD_RESULTS_DIR)
+            if summary["blocks_analyzed"] == 0:
+                update = {"status": "failed", "records": recognized, "total_lines": total_lines,
+                          "error": "Recognized lines didn't contain any complete blocks to analyze."}
+            else:
+                update = {"status": "processed", "records": recognized, "total_lines": total_lines, **summary}
+        update["processed_at"] = datetime.now(timezone.utc)
+        uploads.update_one({"_id": upload_id}, {"$set": update})
+    except Exception as exc:  # noqa: BLE001 - surfaced to the user via the row's status
+        uploads.update_one(
+            {"_id": upload_id},
+            {"$set": {"status": "failed", "error": str(exc)[:500], "processed_at": datetime.now(timezone.utc)}},
+        )
+
+
+def _process_upload(upload_id, stored_path, log_source="hdfs"):
     """Parse the saved file, then run recognized lines through detection.
 
     The parser never rejects a line: anything it cannot match comes back as a
@@ -169,6 +229,8 @@ def _process_upload(upload_id, stored_path):
     only lines that actually matched the HDFS format, fail the upload when
     none of them did, and only score the recognized subset.
     """
+    if log_source != "hdfs":
+        return _process_other_source(upload_id, stored_path, log_source)
     try:
         frame = HDFSParser().parse(str(stored_path))
         total_lines = int(len(frame))
@@ -217,6 +279,13 @@ def upload_log():
     if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
         return jsonify({"error": f"Unsupported file type. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"}), 400
 
+    log_source = (request.form.get("source") or "hdfs").strip().lower()
+    if log_source not in multi_source_upload.UPLOAD_SOURCES:
+        return jsonify({"error": f"Unknown source '{log_source}'. Choose one of: {', '.join(multi_source_upload.UPLOAD_SOURCES)}"}), 400
+    if log_source != "hdfs" and multi_source_upload.deployed_model(log_source) is None:
+        return jsonify({"error": f"No trained model for source '{log_source}' yet. "
+                                 f"Run: python3 scripts/run_source_pipeline.py --source {log_source}"}), 400
+
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     # Prefix with a timestamp so re-uploading the same filename doesn't clobber.
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
@@ -230,6 +299,7 @@ def upload_log():
         "name": filename,
         "stored_path": str(stored_path),
         "source": "Manual Upload",
+        "log_source": log_source,
         "size_bytes": size_bytes,
         "records": None,
         "status": "processing",
@@ -239,7 +309,7 @@ def upload_log():
     result = uploads.insert_one(doc)
     doc["_id"] = result.inserted_id
 
-    threading.Thread(target=_process_upload, args=(result.inserted_id, stored_path), daemon=True).start()
+    threading.Thread(target=_process_upload, args=(result.inserted_id, stored_path, log_source), daemon=True).start()
 
     return jsonify(_serialize(doc)), 201
 
@@ -266,10 +336,23 @@ def list_uploads():
     return jsonify({"uploads": [_serialize(r) for r in rows], "total": uploads.count_documents(owner)})
 
 
+def _log_source_options():
+    """Log types an upload can be scored as, and whether each has a model on
+    this server (HDFS: the deployed model; others: data/models/<source>/)."""
+    from multi_source.sources import SOURCES
+
+    hdfs_model = Path(resolve_current_deployment().get("model_path", ""))
+    options = [{"value": "hdfs", "label": "HDFS", "trained": hdfs_model.exists(), "data_kind": "real", "default": True}]
+    for name, config in SOURCES.items():
+        options.append({"value": name, "label": config.title, "trained": multi_source_upload.deployed_model(name) is not None,
+                        "data_kind": config.data_kind, "default": False})
+    return options
+
+
 @sources_bp.get("/api/sources/connectors")
 @token_required
 def list_connectors():
-    return jsonify({"connectors": CONNECTORS})
+    return jsonify({"connectors": CONNECTORS, "log_sources": _log_source_options()})
 
 
 @sources_bp.get("/api/sources/uploads/<upload_id>/detections")

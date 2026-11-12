@@ -1,0 +1,53 @@
+{
+  "k": 20,
+  "model_path": "data/models/early_warning/isolation_forest_k20.pkl",
+  "features": [
+    "n_events",
+    "elapsed_seconds",
+    "distinct_event_types",
+    "distinct_components",
+    "warn_count",
+    "block_size_max",
+    "first_component_encoded",
+    "first_event_type_encoded",
+    "dominant_component_encoded",
+    "dominant_event_type_encoded",
+    "count_RECEIVED_BLOCK",
+    "count_REPLICATE_BLOCK",
+    "count_ALLOCATE_BLOCK",
+    "count_OTHER",
+    "count_PACKET_TERMINATED",
+    "count_RECEIVE_BLOCK",
+    "count_SERVE_BLOCK",
+    "count_START_TRANSFER",
+    "count_STORE_BLOCK",
+    "count_TRANSMIT_BLOCK"
+  ],
+  "threshold": {
+    "alert_quantile": 0.9801146866300452,
+    "score_threshold": 0.6618634800356901,
+    "train_f1": 0.6812509473046027
+  },
+  "test": {
+    "precision": 0.8490011750881316,
+    "recall": 0.5721639279350623,
+    "f1": 0.6836191602602011,
+    "false_alarm_rate": 0.0030692430792748464,
+    "accuracy": 0.9844944614796052,
+    "alerts": 3404,
+    "confusion_matrix": {
+      "tp": 2890,
+      "fp": 514,
+      "fn": 2161,
+      "tn": 166954
+    },
+    "lead_time": {
+      "mean_over_true_alerts": 0.1241672505019634,
+      "median_over_true_alerts": 0.0,
+      "share_of_true_alerts_before_block_end": 0.3660899653979239,
+      "expected_lead_per_alert": 0.10541814158362932,
+      "mean_seconds_over_true_alerts": 5165.393771626297,
+      "median_seconds_over_true_alerts": 0.0
+    }
+  }
+}

@@ -69,6 +69,8 @@ python3 scripts/download_dataset.py
 ```
 
 This downloads the HDFS log (~1.5GB) and anomaly labels from Hugging Face into `data/raw/hdfs/`.
+`python3 scripts/download_dataset.py --source all` also fetches the OpenStack, Apache, CloudTrail
+and Django logs (~320MB) into `data/raw/<source>/`; `--source openstack` etc. fetches one.
 
 ### 6. Start the API Server
 

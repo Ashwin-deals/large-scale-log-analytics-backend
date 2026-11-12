@@ -273,11 +273,17 @@ Upload a log file for processing.
 **Content-Type**: `multipart/form-data`
 
 **Form Fields**:
-| Field | Type | Required | Description       |
-|-------|------|----------|-------------------|
-| file  | File | Yes      | Log file to upload |
+| Field  | Type   | Required | Description |
+|--------|--------|----------|-------------|
+| file   | File   | Yes      | Log file to upload |
+| source | string | No       | Log type: `hdfs` (default) or `openstack`. It picks the matching parser, vocabulary and deployed model. Other sources configured in `multi_source/` are also accepted. |
 
-**Allowed File Extensions**: `.log`, `.json`, `.csv`, `.txt`
+**Allowed File Extensions**: `.log`, `.json`, `.csv`, `.txt`, `.gz`
+
+**Per-source scoring**:
+- `hdfs` uploads are scored by the deployed HDFS model (`data/models/current_version.json`), and their new blocks extend the HDFS dashboard totals.
+- `openstack` uploads are scored by `data/models/openstack/current_version.json`, with OpenStack's own vocabulary, and never touch the HDFS totals.
+- Scoring refuses to run, and the upload is marked `failed`, if the source's category vocabulary file is missing or the model has no encoder stamp. Guessing the encoding in either case would give the same file a different anomaly count on a different server.
 
 **Maximum File Size**: 500 MB
 
@@ -305,7 +311,9 @@ Upload a log file for processing.
 |------|------------------------|-----------------------------------------------------|
 | 400  | No file provided       | `{"error": "No file was provided."}`               |
 | 400  | No file selected       | `{"error": "No file was selected."}`               |
-| 400  | Invalid extension      | `{"error": "Unsupported file type. Allowed: .csv, .json, .log, .txt"}` |
+| 400  | Invalid extension      | `{"error": "Unsupported file type. Allowed: .csv, .gz, .json, .log, .txt"}` |
+| 400  | Unknown `source`       | `{"error": "Unknown source 'x'. Choose one of: hdfs, openstack, ..."}` |
+| 400  | Source has no trained model | `{"error": "No trained model for source 'openstack' yet. Run: python3 scripts/run_source_pipeline.py --source openstack"}` |
 | 413  | File too large         | (Flask returns 413 automatically)                  |
 
 ---
@@ -334,6 +342,18 @@ List upload history.
             "total_lines": 500,
             "status": "processed",
             "error": null,
+            "log_source": "hdfs",
+            "results_available": true,
+            "blocks_analyzed": "<int>",
+            "anomalies_detected": "<int>",
+            "anomaly_rate_pct": "<float>",
+            "model_version": "<int>",
+            "scoring": {
+                "model_version": "<int>",
+                "model_path": "data/models/isolation_forest_v2.pkl",
+                "model_encoder_fingerprint": "<16 hex chars>",
+                "vocab_fingerprint": "<16 hex chars>"
+            },
             "uploaded_at": "2026-09-07T10:30:00Z",
             "uploaded_by": "user@example.com"
         }
@@ -341,6 +361,10 @@ List upload history.
     "total": 1
 }
 ```
+
+**Anomaly counts come from this server's results file**, the same source the dashboard reads (`upload_store.py`), never from the number stored on the Mongo document.
+- If the upload was scored by a different server that shares the MongoDB cluster, its results file isn't here. The row then has `results_available: false`, null counts, and a `results_note`, so it never shows a count that conflicts with the dashboard.
+- `scoring` records which model and vocabulary produced the count.
 
 **Upload Status Values**:
 | Status      | Description                                        |
@@ -367,9 +391,147 @@ List available data source connectors and their status.
         {"name": "GCP Logging", "icon": "Waypoints", "enabled": false},
         {"name": "Kafka Stream", "icon": "ListTree", "enabled": false},
         {"name": "Syslog (RFC 5424)", "icon": "FileText", "enabled": false}
+    ],
+    "log_sources": [
+        {"value": "hdfs", "label": "HDFS", "trained": true, "data_kind": "real", "default": true},
+        {"value": "openstack", "label": "OpenStack (nova)", "trained": true, "data_kind": "real", "default": false}
     ]
 }
 ```
+
+`log_sources` lists the values the upload `source` field accepts, and whether each has a trained model on this server. The Log Sources page builds its source selector from this list.
+
+---
+
+### Smart Storage Endpoints
+
+All require JWT authentication. They read `data/storage/policy_best.json` and `data/storage/storage_report.json`, written by `python3 scripts/optimize_storage_policy.py`, and return `404` with that hint until the script has been run. `stale: true` means the deployed model has changed since the policy was tuned.
+
+#### GET /api/storage/summary
+
+Held-out results, tier counts, baseline comparison and the learned policy. The GA history is trimmed to `ga_summary`.
+
+**Success Response** (200 OK), abridged; values are from `data/storage/storage_report.json`:
+```json
+{
+    "config": {"retention_target": 0.95, "warm_credit": 0.5, "penalty_weight": 1000.0, "error_weight": 0.2, "test_size": 0.5, "seed": 42},
+    "split": {"tune": {"blocks": 287530, "anomalies": 8419}, "holdout": {"blocks": 287531, "anomalies": 8419, "lines": 5587093}},
+    "policy": {
+        "weights": {"anomaly_score": 0.7501, "event_frequency": 0.0731, "block_size": 0.1768},
+        "error_weight": 0.2,
+        "thresholds": {"hot": 0.1723, "warm": 0.0493},
+        "summary_fraction": 0.0565
+    },
+    "holdout": {
+        "storage_saved_pct": 68.76, "weighted_retention": 0.9676, "full_retention": 0.9356, "coverage": 0.9996,
+        "kept_lines": 1745197, "total_lines": 5587093,
+        "tier_counts": {"HOT": 62961, "WARM": 215399, "COLD": 9171},
+        "meets_retention_target": true
+    },
+    "holdout_comparison": [{"name": "ga_policy", "clean": {"storage_saved_pct": 68.76, "weighted_retention": 0.9676}, "deployed": {"storage_saved_pct": 64.19, "weighted_retention": 0.9662}}],
+    "ga_beats_baselines": true,
+    "stale": false
+}
+```
+
+#### GET /api/storage/policy
+
+The learned policy alone: `policy`, `retention_target`, `model`, `generated_at`, `stale`.
+
+#### POST /api/storage/simulate
+
+Re-cost the policy with overridden parameters. All body fields are optional; omitted ones keep the learned value.
+
+**Request Body**:
+| Field | Type | Description |
+|---|---|---|
+| weights | object | Any of `anomaly_score`, `event_frequency`, `block_size` (non-negative, rescaled to sum to 1) |
+| t_hot, t_warm | float | Thresholds, with `0 ≤ t_warm < t_hot ≤ 1` |
+| summary_fraction | float | In (0, 1] |
+| warm_credit | float | Retention credit for a WARM anomaly, in [0, 1] |
+| retention_target | float | In [0, 1] |
+| split | string | `holdout` (default), `tune` or `all` |
+
+**Success Response** (200 OK). With no overrides it reproduces the held-out numbers above:
+```json
+{
+    "split": "holdout",
+    "outcome": {"storage_saved_pct": 68.76, "weighted_retention": 0.9676, "full_retention": 0.9356, "coverage": 0.9996,
+                "tier_counts": {"HOT": 62961, "WARM": 215399, "COLD": 9171}},
+    "meets_retention_target": true,
+    "retention_target": 0.95,
+    "warm_credit": 0.5,
+    "stale": false
+}
+```
+
+**Errors**: `400` for invalid input, for example `{"error": "thresholds must satisfy 0 <= t_warm < t_hot <= 1"}`.
+
+---
+
+### Early Warning Endpoint
+
+#### GET /api/early-warning/summary
+
+Held-out metrics per prefix length k, and the precision-vs-lead-time trade-off, from `data/evaluation/early_warning_report.json`. It is written by `python3 scripts/build_early_warning.py`; until then the endpoint returns `404`. JWT required.
+
+**Success Response** (200 OK), abridged:
+```json
+{
+    "table": [
+        {"k": 5,  "precision": 0.8833, "recall": 0.3671, "f1": 0.5186, "false_alarm_rate": 0.0015, "mean_lead_over_true_alerts": 0.012},
+        {"k": 20, "precision": 0.8490, "recall": 0.5722, "f1": 0.6836, "false_alarm_rate": 0.0031, "mean_lead_over_true_alerts": 0.124,
+         "in_progress": {"blocks": 42339, "anomalies": 2009, "precision": 0.6961, "recall": 0.5266, "f1": 0.5996}}
+    ],
+    "trade_off": {"pareto_front": [5, 10, 20], "best_k": 20},
+    "trade_off_in_progress": {"pareto_front": [5, 10, 20], "best_k": 20}
+}
+```
+`in_progress` covers only blocks with more than k events, i.e. still running when the alert fires.
+
+---
+
+### Stream Endpoints
+
+Both require JWT authentication and read what `python3 -m streaming.processor` writes to MongoDB. Setup is in `docs/streaming_guide.md`.
+
+#### GET /api/stream/status
+
+The newest processor run's live counters. Optional `run_id` selects a specific run. Returns `404` until a processor has reported, and `503` if MongoDB is unreachable.
+
+**Success Response** (200 OK), with field types:
+```json
+{
+    "run_id": "<string>",
+    "live": "<bool: updated within 10 s and not stopped>",
+    "seconds_since_update": "<float>",
+    "events_per_sec": "<float: over the last 5 s>",
+    "blocks_in_flight": "<int>",
+    "alerts": {"early_warning": "<int>", "block_anomaly": "<int>", "total": "<int>"},
+    "storage": {"blocks_decided": "<int>", "lines_seen": "<int>", "lines_kept": "<int>", "storage_saved_pct": "<float>",
+                "tier_counts": {"HOT": "<int>", "WARM": "<int>", "COLD": "<int>"}},
+    "finalize_reasons": {"timeout": "<int>", "end_of_stream": "<int>"},
+    "log_time_watermark": "<ISO time of the newest log event>",
+    "ks": ["<int>"]
+}
+```
+
+#### GET /api/stream/alerts
+
+Alerts from `stream_alerts`, newest first.
+
+**Query Parameters**:
+| Parameter | Default | Description |
+|---|---|---|
+| limit | 50 | 1–500 |
+| page | 1 | |
+| type | (all) | `early_warning` or `block_anomaly` |
+| run_id | newest run | |
+
+**Alert fields**:
+- **Every alert:** `id`, `type`, `block_id`, `score`, `threshold`, `events_seen`, `event_time` (log time) and `detected_at`.
+- **`early_warning`:** also `k`. Once its block finishes, it also gets `lead_fraction` (the share of the block's events still to come when the alert fired), `events_total` and `block_finalized`.
+- **`block_anomaly`:** also `early_warning_k` and `finalize_reason`. `end_of_stream` means the block was forced out when the topic went quiet, possibly before it finished.
 
 ---
 

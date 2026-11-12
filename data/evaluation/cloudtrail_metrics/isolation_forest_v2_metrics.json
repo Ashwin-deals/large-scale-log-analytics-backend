@@ -1,0 +1,28 @@
+{
+  "accuracy": 0.9858352803738317,
+  "precision": 0.5290102389078498,
+  "recall": 0.7345971563981043,
+  "f1": 0.6150793650793651,
+  "confusion_matrix": {
+    "labels": [
+      "Normal",
+      "Anomaly"
+    ],
+    "matrix": [
+      [
+        13347,
+        138
+      ],
+      [
+        56,
+        155
+      ]
+    ]
+  },
+  "support": {
+    "total": 13696,
+    "normal": 13485,
+    "anomaly": 211
+  },
+  "caught": "caught 155 of 211"
+}

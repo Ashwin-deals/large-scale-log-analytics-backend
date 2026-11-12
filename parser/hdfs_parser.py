@@ -62,6 +62,13 @@ class HDFSParser(BaseParser):
 
         return pd.DataFrame(rows, columns=self.schema)
 
+    def parse_line(self, line: str) -> dict:
+        """
+        Parses one raw HDFS log line into a COMMON_LOG_SCHEMA dict, exactly
+        as parse() treats each line of a file (used by the streaming layer).
+        """
+        return self._parse_line(line.rstrip("\n\r"))
+
     def classify_event(self, message: str) -> str:
         """
         Maps a raw HDFS log message to the common event taxonomy.
