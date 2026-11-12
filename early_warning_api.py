@@ -13,8 +13,10 @@ from pathlib import Path
 from flask import Blueprint, jsonify
 
 from auth import token_required
+from source_context import register_error_handlers, request_context
 
 early_warning_bp = Blueprint("early_warning", __name__)
+register_error_handlers(early_warning_bp)
 
 REPORT_PATH = Path("data/evaluation/early_warning_report.json")
 
@@ -44,15 +46,25 @@ def _summary_row(k: str, result: dict) -> dict:
 @early_warning_bp.route("/api/early-warning/summary", methods=["GET"])
 @token_required
 def get_summary():
+    ctx = request_context()
+    # HDFS has its own report; every other source keeps early warning inside
+    # data/evaluation/<source>_report.json, in the same shape.
+    path = REPORT_PATH if ctx.is_hdfs else ctx.source_report_path
+    hint = "python3 scripts/build_early_warning.py" if ctx.is_hdfs else f"python3 scripts/run_source_pipeline.py --source {ctx.name}"
     try:
-        report = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+        report = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return jsonify({"error": f"{REPORT_PATH} not found. Run `python3 scripts/build_early_warning.py` first."}), 404
+        return jsonify({"error": f"{path} not found. Run `{hint}` first.", "not_ready": True}), 404
     except json.JSONDecodeError as exc:
-        return jsonify({"error": f"{REPORT_PATH} is unreadable ({exc}). Re-run scripts/build_early_warning.py."}), 404
+        return jsonify({"error": f"{path} is unreadable ({exc}). Re-run `{hint}`."}), 404
+    if not ctx.is_hdfs:
+        report = report.get("early_warning") or {}
+        if not report.get("results"):
+            return jsonify({"error": f"{path} has no early-warning results. Re-run `{hint}`.", "not_ready": True}), 404
 
     results = report.get("results", {})
     for result in results.values():
         result.pop("ga_history", None)
     report["table"] = sorted((_summary_row(k, r) for k, r in results.items()), key=lambda row: row["k"])
+    report["source"] = {"name": ctx.name, "title": ctx.title, "label_kind": ctx.label_kind, "block_noun": ctx.block_noun}
     return jsonify(report)

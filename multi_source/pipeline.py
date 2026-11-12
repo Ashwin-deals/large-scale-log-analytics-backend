@@ -39,6 +39,7 @@ from detection.isolation_forest import TRAINING_FEATURE_COLUMNS, build_isolation
 from detection.predict import predict
 from early_warning.model import train_and_evaluate_k, trade_off
 from early_warning.prefix_features import TOTAL_EVENTS_COLUMN, build_prefix_features, feature_columns
+from feature_engineering.block_metadata import build_block_metadata
 from feature_engineering.data_cleaner import HDFSDataCleaner
 from feature_engineering.feature_extractor import HDFSFeatureExtractor
 from optimization.ga_isolation_forest import build_model, run_ga, stratified_subsample
@@ -356,6 +357,8 @@ def run_smart_storage(config: SourceConfig, paths: Paths, merged: pd.DataFrame, 
                               "fitted_on": "all blocks (in-sample)" if config.protocol == "in_sample" else "tune half only"},
                              normalizer, tune_table, holdout_table, ga)
     policy_payload, report = build_report(variant, None, 0.95, 1000.0, STORAGE_TEST_SIZE, RANDOM_STATE, n_random_trials=10)
+    # The API rebuilds the same tune/holdout split from this; in-sample sources use every block for both.
+    policy_payload["split"]["protocol"] = config.protocol
     (paths.storage / "policy_best.json").write_text(json.dumps(policy_payload, indent=2), encoding="utf-8")
     (paths.storage / "storage_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     for scratch in paths.storage.glob("_*_scores.csv"):
@@ -432,6 +435,8 @@ def run(source: str) -> dict:
     ingested = ingest(config, paths)
     stats = ingested["stats"]
     _log(source, f"{stats['lines_or_records']:,} lines/records -> {stats['events_after_cleaning']:,} events, {stats['blocks']:,} blocks")
+    # Per-block metadata and dataset stats for the dashboard's ?source= views.
+    build_block_metadata(paths.cleaned, paths.processed / "block_metadata.csv", paths.processed / "dataset_stats.json")
 
     features = pd.read_csv(paths.features)
     label_of, label_info = build_labels(config, paths, features["block_id"], ingested["weak_labeler"])

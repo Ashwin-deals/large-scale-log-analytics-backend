@@ -50,14 +50,16 @@ def resolve_deployed_model() -> dict:
     return {"version": current.get("version"), "model_path": current["model_path"]}
 
 
-def score_blocks(model, merged: pd.DataFrame) -> pd.DataFrame:
-    """One row per row of `merged` (load_labeled_features() output), in the same order."""
+def score_blocks(model, merged: pd.DataFrame, vocab_path: str | Path | None = None) -> pd.DataFrame:
+    """One row per row of `merged` (load_labeled_features() output), in the same order.
+    vocab_path: the source's category vocabulary (default: HDFS's)."""
     with warnings.catch_warnings():
         # A model saved before encoder fingerprints only warns; the pipeline's
         # own predict() contract is to proceed, so don't spam every call.
         warnings.simplefilter("ignore", RuntimeWarning)
         predictions = predict(
-            model, merged, output_path=SCRATCH_PREDICTIONS_PATH, feature_columns=list(model.feature_names_in_)
+            model, merged, output_path=SCRATCH_PREDICTIONS_PATH, feature_columns=list(model.feature_names_in_),
+            **({"vocab_path": vocab_path} if vocab_path is not None else {}),
         )
     frame = pd.DataFrame(
         {

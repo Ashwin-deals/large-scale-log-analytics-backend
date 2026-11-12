@@ -116,10 +116,10 @@ class UploadConsistencyTest(unittest.TestCase):
             mock.patch.object(sources_api, "UPLOAD_PROCESSED_DIR", self.tmp / "processed"),
             mock.patch.object(sources_api, "UPLOAD_RESULTS_DIR", self.results),
             mock.patch.object(sources_api, "VOCAB_PATH", self.vocab),
-            mock.patch.object(sources_api, "resolve_current_deployment", lambda: dict(self.deployment)),
+            mock.patch.object(sources_api, "resolve_current_deployment", lambda ctx=None: dict(self.deployment)),
             mock.patch.object(pipeline_api, "uploads", self.uploads),
             mock.patch.object(pipeline_api, "UPLOAD_BLOCKS_DIR", self.results),
-            mock.patch.object(pipeline_api, "resolve_current_deployment", lambda: dict(self.deployment)),
+            mock.patch.object(pipeline_api, "resolve_current_deployment", lambda ctx=None: dict(self.deployment)),
             mock.patch.dict(os.environ, {"JWT_SECRET": "test-secret"}),
         ]
         for patch in patches:
