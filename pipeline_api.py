@@ -863,7 +863,16 @@ def _source_evaluation(ctx: SourceContext, report: dict | None) -> dict | None:
         if not holdout:
             return None
         deployed = holdout["versions"].get(f"V{holdout['deployed_version']}", {})
+        comparison = _read_json(EVALUATION_DIR / "autoencoder_comparison.json")
         return {
+            # D1: the extra detector the architecture diagram calls for, on the same held-out splits.
+            "model_comparison": {
+                "protocol": comparison["protocol"],
+                "seeds": [run["seed"] for run in comparison["runs"]],
+                "rows": [{"detector": name, **{k: v["mean"] for k, v in row.items()},
+                          "f1_std": row["f1_at_deployed_alert_rate"]["std"]}
+                         for name, row in comparison["summary"].items()],
+            } if comparison else None,
             "protocol": "held-out 30%, refit on 70% (scripts/evaluate_holdout.py)",
             "test_blocks": holdout["split"]["test"]["blocks"],
             "test_anomalies": holdout["split"]["test"]["anomalies"],
@@ -936,6 +945,14 @@ def _run_retrain_job(job_id: str, source: str = "hdfs"):
         with _jobs_lock:
             _jobs[job_id]["random_seed"] = run_seed
 
+        # D2: analysts' verdicts override the labels before anything is
+        # sampled or scored, so the GA's fitness reflects confirmed alerts.
+        from feedback_api import apply_feedback, load_feedback
+
+        merged, feedback_stats = apply_feedback(merged, load_feedback(ctx.name))
+        with _jobs_lock:
+            _jobs[job_id]["feedback"] = feedback_stats
+
         # Non-HDFS sources record V1/V2 F1 on a fixed held-out 30% split
         # (multi_source/pipeline.py), so a candidate must be fitted on the same
         # 70% and scored on the same 30% -- scoring it in-sample against a
@@ -979,6 +996,17 @@ def _run_retrain_job(job_id: str, source: str = "hdfs"):
         )
         candidate_metrics = evaluate(candidate_predictions, metrics_path=candidate_metrics_path)
         print_metrics_table(candidate_metrics)
+
+        if feedback_stats["applied"]:
+            # The incumbent's recorded F1 used the old labels; re-score it on
+            # the same corrected rows so promote-if-better stays fair.
+            incumbent = joblib.load(current_model_path)
+            incumbent_predictions = predict(
+                incumbent, eval_rows, output_path=predictions_path.with_name(f"_{ctx.name}_incumbent_feedback.csv"),
+                feature_columns=list(incumbent.feature_names_in_), **vocab_kwargs,
+            )
+            current_metrics_path = candidate_metrics_path.with_name("current_with_feedback_metrics.json")
+            evaluate(incumbent_predictions, metrics_path=current_metrics_path)
 
         decision = evaluate_and_promote(
             current_model_path=current_model_path,
