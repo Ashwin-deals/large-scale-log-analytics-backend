@@ -32,11 +32,12 @@ EARLY_WARNING_DIR = Path("data/models/early_warning")
 TIER_NAMES = {HOT: "HOT", WARM: "WARM", COLD: "COLD"}
 
 
-def _load(path):
+def _load(path, vocab_path=None):
     model = joblib.load(path)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)  # pre-fingerprint models only warn, as in batch
-        check_encoder_compatibility(model)  # a renumbered vocabulary refuses to score, as in batch
+        # A renumbered vocabulary refuses to score, as in batch; each source checks against its own.
+        check_encoder_compatibility(model, **({"vocab_path": vocab_path} if vocab_path else {}))
     if hasattr(model, "n_jobs"):
         model.n_jobs = 1
     return model
@@ -53,21 +54,37 @@ class EarlyWarningModel:
         return -self.model.score_samples(frame[list(self.model.feature_names_in_)])
 
 
+def scorer_for(source: str, ks) -> "Scorer":
+    """The Scorer for one log source: its deployed model, early-warning
+    models and Smart Storage policy (HDFS keeps the original paths)."""
+    from pipeline_api import resolve_current_deployment
+    from source_context import get_context
+
+    ctx = get_context(source)
+    if ctx.is_hdfs:
+        return Scorer(ks)
+    current = resolve_current_deployment(ctx)
+    ctx.require(Path(current["model_path"]), ctx.policy_path, ctx.vocab_path)
+    return Scorer(ks, early_warning_dir=ctx.models_dir / "early_warning", deployed_model_path=current["model_path"],
+                  policy_path=ctx.policy_path, deployed_version=current.get("version"), vocab_path=ctx.vocab_path)
+
+
 class Scorer:
-    def __init__(self, ks, early_warning_dir=EARLY_WARNING_DIR, deployed_model_path=None, policy_path=POLICY_PATH):
+    def __init__(self, ks, early_warning_dir=EARLY_WARNING_DIR, deployed_model_path=None, policy_path=POLICY_PATH,
+                 deployed_version=None, vocab_path=None):
         self.early = {}
         for k in sorted(ks):
-            model = _load(Path(early_warning_dir) / f"isolation_forest_k{k}.pkl")
+            model = _load(Path(early_warning_dir) / f"isolation_forest_k{k}.pkl", vocab_path)
             self.early[k] = EarlyWarningModel(k, model, float(model.alert_threshold_))
 
-        deployed = resolve_deployed_model()
-        self.deployed_version = deployed["version"] if deployed_model_path is None else None
-        self.deployed = _load(deployed_model_path or deployed["model_path"])
+        deployed = resolve_deployed_model() if deployed_model_path is None else None
+        self.deployed_version = deployed["version"] if deployed else deployed_version
+        self.deployed = _load(deployed_model_path or deployed["model_path"], vocab_path)
 
         policy_payload = json.loads(Path(policy_path).read_text(encoding="utf-8"))
         self.policy = StoragePolicy.from_dict(policy_payload["policy"])
         self.normalizer = Normalizer.from_dict(policy_payload["normalizer"])
-        self.storage_model = _load(policy_payload["model"]["model_path"])
+        self.storage_model = _load(policy_payload["model"]["model_path"], vocab_path)
 
     def full(self, rows: list[dict]) -> dict:
         """Deployed-model verdict and Smart Storage tier for finished blocks."""

@@ -75,7 +75,8 @@ class StreamProcessor:
     """Kafka-free core: feed it lines, get back alerts and storage decisions."""
 
     def __init__(self, scorer, ks=DEFAULT_KS, idle_timeout_seconds=DEFAULT_IDLE_TIMEOUT_SECONDS,
-                 run_id: str | None = None, encoder: StreamEncoder | None = None, clock=time.monotonic):
+                 run_id: str | None = None, encoder: StreamEncoder | None = None, clock=time.monotonic,
+                 source: str = "hdfs", parser=None):
         self.scorer = scorer
         self.ks = sorted(set(int(k) for k in ks))
         missing = [k for k in self.ks if k not in scorer.early]
@@ -85,7 +86,8 @@ class StreamProcessor:
         self.run_id = run_id or _now_utc().strftime("run-%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:6]
         self.encoder = encoder or StreamEncoder()
         self.event_type_names = self.encoder.event_type_names()
-        self.parser = HDFSParser()
+        self.source = source
+        self.parser = parser or HDFSParser()
         self.clock = clock
 
         self.blocks: dict[str, BlockState] = {}
@@ -161,6 +163,7 @@ class StreamProcessor:
         return {
             "_id": f"{self.run_id}:{kind}:{state.block_id}",
             "run_id": self.run_id,
+            "source": self.source,
             "type": kind,
             "block_id": state.block_id,
             "score": score,
@@ -174,8 +177,9 @@ class StreamProcessor:
     # -- completion --------------------------------------------------------
 
     def expire(self) -> tuple[list[dict], list[dict]]:
-        """Finalize blocks quiet for longer than the timeout in log time."""
-        if self.watermark is None:
+        """Finalize blocks quiet for longer than the timeout in log time
+        (never, when idle_timeout_seconds is None: end of stream only)."""
+        if self.watermark is None or self.idle_timeout_seconds is None:
             return [], []
         cutoff = self.watermark - self.idle_timeout_seconds
         quiet = [s for s in self.blocks.values() if s.last_event_seconds < cutoff]
@@ -202,6 +206,7 @@ class StreamProcessor:
                                           finalize_reason=reason))
             decisions.append({
                 "run_id": self.run_id,
+                "source": self.source,
                 "block_id": state.block_id,
                 "reason": reason,
                 "events": state.n,
@@ -242,6 +247,7 @@ class StreamProcessor:
         return {
             "_id": self.run_id,
             "run_id": self.run_id,
+            "source": self.source,
             "started_at": self.started_at.isoformat(),
             "updated_at": _now_utc().isoformat(),
             "events_per_sec": round(self.events_per_second(), 1),
@@ -312,9 +318,13 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Consume logs.raw, raise early warnings, publish storage decisions.")
     parser.add_argument("--bootstrap", default=BOOTSTRAP_SERVERS)
     parser.add_argument("--group", default=CONSUMER_GROUP)
-    parser.add_argument("--k", type=int, nargs="+", default=list(DEFAULT_KS), help="prefix lengths to alert at (models must exist)")
-    parser.add_argument("--idle-timeout", type=int, default=DEFAULT_IDLE_TIMEOUT_SECONDS,
-                        help="finalize a block after this many seconds of log time without an event")
+    parser.add_argument("--source", default="hdfs", choices=("hdfs", "openstack", "apache", "cloudtrail", "django"),
+                        help="log source to consume (its own topic, parser, models and policy)")
+    parser.add_argument("--k", type=int, nargs="+", default=None,
+                        help="prefix lengths to alert at (default: the source's best trade-off k; models must exist)")
+    parser.add_argument("--idle-timeout", type=int, default=None,
+                        help="finalize a block after this many seconds of log time without an event "
+                             "(default per source: hdfs/openstack/cloudtrail 3600, apache 120, django never; 0 = never)")
     parser.add_argument("--idle-flush", type=float, default=DEFAULT_IDLE_FLUSH_SECONDS,
                         help="when the topic is quiet this many wall seconds, finalize every block in flight")
     parser.add_argument("--stop-after-idle", type=float, default=None,
@@ -329,10 +339,20 @@ def main(argv=None):
     from confluent_kafka import Consumer, KafkaException, Producer
 
     from db import stream_alerts, stream_status
-    from streaming.scoring import Scorer
+    from source_context import get_context
+    from streaming.scoring import scorer_for
+    from streaming.sources import best_k, line_parser, topic_for
 
     args = parse_args(argv)
-    processor = StreamProcessor(Scorer(args.k), ks=args.k, idle_timeout_seconds=args.idle_timeout, run_id=args.run_id)
+    ks = args.k or [best_k(args.source)]
+    from streaming.sources import IDLE_TIMEOUTS
+
+    idle_timeout = IDLE_TIMEOUTS[args.source] if args.idle_timeout is None else (args.idle_timeout or None)
+    ctx = get_context(args.source)
+    encoder = StreamEncoder() if ctx.is_hdfs else StreamEncoder(ctx.vocab_path)
+    processor = StreamProcessor(scorer_for(args.source, ks), ks=ks, idle_timeout_seconds=idle_timeout,
+                                run_id=args.run_id, encoder=encoder, source=args.source, parser=line_parser(args.source))
+    topic = topic_for(args.source)
     sink = MongoSink(stream_alerts, stream_status)
     group = f"{args.group}-{processor.run_id}" if args.from_beginning else args.group
     consumer = Consumer({
@@ -342,7 +362,7 @@ def main(argv=None):
         "enable.auto.commit": True,
     })
     producer = Producer({"bootstrap.servers": args.bootstrap, "linger.ms": 50})
-    consumer.subscribe([TOPIC_LOGS_RAW])
+    consumer.subscribe([topic])
 
     stopping = {"flag": False}
     signal.signal(signal.SIGINT, lambda *_: stopping.update(flag=True))
@@ -357,8 +377,8 @@ def main(argv=None):
         sink.save_alerts(alerts)
         sink.record_leads(decisions)
 
-    print(f"[processor] run {processor.run_id}: consuming {TOPIC_LOGS_RAW} from {args.bootstrap} (group {group}), "
-          f"k = {processor.ks}, idle timeout {args.idle_timeout}s log time", flush=True)
+    print(f"[processor] run {processor.run_id} ({args.source}): consuming {topic} from {args.bootstrap} (group {group}), "
+          f"k = {processor.ks}, idle timeout {f'{idle_timeout}s log time' if idle_timeout else 'none (end of stream)'}", flush=True)
     last_message = last_status = time.monotonic()
     flushed_since_last_message = True
     try:
