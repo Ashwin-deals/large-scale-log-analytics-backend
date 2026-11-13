@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-12T11:41:16+0530",
+  "generated_at": "2026-11-14T00:04:45+0530",
   "model": {
     "kind": "tune_half_refit",
     "version": 2,
@@ -23,16 +23,16 @@
   },
   "policy": {
     "weights": {
-      "anomaly_score": 0.7501154641920006,
-      "event_frequency": 0.07310280124570757,
-      "block_size": 0.17678173456229185
+      "anomaly_score": 0.9163072489803897,
+      "event_frequency": 0.05575648350506988,
+      "block_size": 0.02793626751454039
     },
     "error_weight": 0.2,
     "thresholds": {
-      "hot": 0.1723480922392818,
-      "warm": 0.04927906942499832
+      "hot": 0.11895140528239999,
+      "warm": 0.11633854118218445
     },
-    "summary_fraction": 0.05651668468715287
+    "summary_fraction": 0.4166619333619103
   },
   "normalizer": {
     "score_min": -0.11421340462994328,
@@ -1046,6 +1046,7 @@
   "retention_target": 0.95,
   "penalty_weight": 1000.0,
   "warm_credit": 0.5,
+  "warm_ref_fraction": 0.25,
   "split": {
     "test_size": 0.5,
     "seed": 42

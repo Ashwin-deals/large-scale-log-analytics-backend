@@ -39,39 +39,36 @@ that refit, and `version_history.json` records the change.
 and features (sklearn `clone`, `random_state` included) on a stratified 70%
 training split. It then scores the 30% the refit never saw.
 
-Data used: the local feature set of **150,000 blocks (4,392 anomalies)**.
-This is a stratified random sample of complete HDFS blocks with the same
-anomaly rate as the full corpus (2.93%), not the full 575,061. Rerun the
-script on the full `features.csv` to replace these numbers; no code change
-is needed.
+Data used: all **575,061 blocks (16,838 anomalies)**. Split seed 42: train
+402,542 blocks (11,787 anomalies), test 172,519 blocks (5,051 anomalies).
 
-Split seed 42: train 105,000 blocks (3,074 anomalies), test 45,000 blocks
-(1,318 anomalies).
+(An earlier run on a 150,000-block sample suggested V2 and V3 were tied;
+the full data shows they are not.)
 
 | Version | Train F1 | **Test F1** | Test precision | Test recall | Test flagged / caught / false alarms |
 |---|---:|---:|---:|---:|---|
-| V1 | 0.1692 | **0.1680** | 0.0980 | 0.5857 | 7,875 / 772 / 7,103 |
-| V2 (deployed) | 0.5616 | **0.5708** | 0.6650 | 0.5000 | 991 / 659 / 332 |
-| V3 | 0.5662 | **0.5760** | 0.7159 | 0.4818 | 887 / 635 / 252 |
+| V1 | 0.1364 | **0.1370** | 0.0766 | 0.6492 | 42,802 / 3,279 / 39,523 |
+| V2 (deployed) | 0.5255 | **0.5224** | 0.5896 | 0.4690 | 4,018 / 2,369 / 1,649 |
+| V3 | 0.5610 | **0.5539** | 0.6651 | 0.4746 | 3,604 / 2,397 / 1,207 |
 
 **No overfitting.** For every version, test F1 is level with train F1.
 Isolation Forest never sees the labels, so the in-sample numbers in
 section 1 are not inflated by memorisation. The GA did use labels to choose
 hyperparameters, but those choices carry over to unseen blocks.
 
-**V2 and V3 are tied on unseen data.** One split is not enough to separate
+**V3 is better on unseen data.** One split is not enough to separate
 them, so the script repeats the comparison over five random splits:
 
 | Version | Test F1, seeds 42 / 1 / 7 / 123 / 2024 | Mean ± std | Best on |
 |---|---|---:|---:|
-| V1 | 0.168 / 0.171 / 0.165 / 0.182 / 0.158 | 0.169 ± 0.008 | 0 of 5 |
-| V2 | 0.571 / 0.580 / 0.587 / 0.587 / 0.553 | **0.575 ± 0.013** | 3 of 5 |
-| V3 | 0.576 / 0.557 / 0.566 / 0.562 / 0.556 | 0.564 ± 0.007 | 2 of 5 |
+| V1 | 0.137 / 0.136 / 0.120 / 0.118 / 0.126 | 0.128 ± 0.008 | 0 of 5 |
+| V2 | 0.522 / 0.547 / 0.542 / 0.509 / 0.521 | 0.528 ± 0.014 | 0 of 5 |
+| V3 | 0.554 / 0.550 / 0.572 / 0.551 / 0.548 | **0.555 ± 0.009** | 5 of 5 |
 
-V3's in-sample lead (0.5622 vs 0.5288) does not survive held-out testing.
-The two differ by less than one standard deviation of the split-to-split
-noise. V3 trades recall for precision: it raises fewer false alarms and
-catches slightly fewer anomalies.
+V3's in-sample lead (0.5622 vs 0.5288) holds on unseen blocks: it wins all
+five splits, by 0.027 F1 on average, about twice the split-to-split spread.
+On the seed-42 test set it catches 28 more anomalies (2,397 against 2,369)
+with 442 fewer false alarms (1,207 against 1,649).
 
 ## 3. The V3 promotion and rollback
 
@@ -111,10 +108,17 @@ remains an inference and is not recorded as the reason.
 
 ### Why V2 stays deployed
 
-- On held-out data V2 and V3 are tied (section 2), so V3 offers no real
-  gain to switch for.
-- Smart Storage, Early Warning and the stream processor were all tuned and
-  evaluated on V2's scores. Switching would mean rerunning all three.
+V3 is the better detector on unseen data (section 2), so the rollback cost
+some accuracy. V2 is still the one deployed because:
+
+- the rollback has not been reversed, and its reason is unconfirmed; and
+- Smart Storage, Early Warning and the stream processor were tuned and
+  evaluated on V2's scores, so re-promoting V3 means rerunning
+  `scripts/optimize_storage_policy.py` (about 1.5 minutes on all blocks)
+  and checking the stream.
+
+Re-promoting V3 is a team decision. `record_rollback(3, reason)` in
+`optimization/model_evolution.py` does it and logs it.
 
 ### A bug the rollback exposed (fixed)
 

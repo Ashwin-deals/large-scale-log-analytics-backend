@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-11-13T01:45:09+0530",
+  "generated_at": "2026-11-14T00:07:48+0530",
   "protocol": "Unsupervised fit on a stratified 70% split, scored on the unseen 30%. Thresholds: the deployed model's alert rate (top contamination share of training scores), and the F1-best threshold on training scores (labels used for the threshold only).",
   "data": {
-    "blocks": 150000,
-    "anomalies": 4392,
+    "blocks": 575061,
+    "anomalies": 16838,
     "note": "575,061 blocks means the full HDFS corpus; fewer means the local sample."
   },
   "deployed_version": 2,
@@ -11,352 +11,352 @@
   "summary": {
     "Isolation Forest (V2 settings)": {
       "roc_auc_test": {
-        "mean": 0.9412769999539368,
-        "std": 0.002669977557485904
+        "mean": 0.895305788379647,
+        "std": 0.016477984280744724
       },
       "f1_at_deployed_alert_rate": {
-        "mean": 0.5754483362650094,
-        "std": 0.012827029332960994
+        "mean": 0.528204417975904,
+        "std": 0.014208468586907313
       },
       "f1_at_train_best_f1_threshold": {
-        "mean": 0.6042800365388649,
-        "std": 0.008630531470613994
+        "mean": 0.5853443631893368,
+        "std": 0.002742631657223789
       },
       "fit_seconds": {
-        "mean": 1.142,
-        "std": 0.029257477676655548
+        "mean": 4.394,
+        "std": 0.04223742416388572
       }
     },
     "Autoencoder (V2's 3 features)": {
       "roc_auc_test": {
-        "mean": 0.7495515127644482,
-        "std": 0.08091387596065
+        "mean": 0.7541696869304294,
+        "std": 0.08979748242215904
       },
       "f1_at_deployed_alert_rate": {
-        "mean": 0.5091284480206489,
-        "std": 0.10003111556093791
+        "mean": 0.5182063893176945,
+        "std": 0.13692624108509313
       },
       "f1_at_train_best_f1_threshold": {
-        "mean": 0.5349378841864114,
-        "std": 0.11186080601368838
+        "mean": 0.5876307057497454,
+        "std": 0.1103868431617227
       },
       "fit_seconds": {
-        "mean": 2.352,
-        "std": 0.05706137047074847
+        "mean": 3.522,
+        "std": 3.18577714223704
       }
     },
     "Autoencoder (all 7 features)": {
       "roc_auc_test": {
-        "mean": 0.7998296124723734,
-        "std": 0.036877035927847114
+        "mean": 0.8005006176590814,
+        "std": 0.04910243797698995
       },
       "f1_at_deployed_alert_rate": {
-        "mean": 0.40018205704576,
-        "std": 0.05071976461380266
+        "mean": 0.2916146650771576,
+        "std": 0.1531122321419873
       },
       "f1_at_train_best_f1_threshold": {
-        "mean": 0.43074559701015397,
-        "std": 0.03808482092293647
+        "mean": 0.38631815363461913,
+        "std": 0.10840833958252205
       },
       "fit_seconds": {
-        "mean": 3.402,
-        "std": 0.07138627319029898
+        "mean": 8.5,
+        "std": 3.9067531275984155
       }
     }
   },
   "runs": [
     {
       "seed": 42,
-      "train_blocks": 105000,
-      "test_blocks": 45000,
-      "test_anomalies": 1318,
+      "train_blocks": 402542,
+      "test_blocks": 172519,
+      "test_anomalies": 5051,
       "results": [
         {
           "detector": "Isolation Forest (V2 settings)",
-          "roc_auc_test": 0.9432636038540093,
+          "roc_auc_test": 0.8898280537774262,
           "at_deployed_alert_rate": {
-            "precision": 0.6649848637739657,
-            "recall": 0.5,
-            "f1": 0.5708098744045041,
-            "flagged": 991
+            "precision": 0.5895968143354903,
+            "recall": 0.46901603642843004,
+            "f1": 0.52243907817841,
+            "flagged": 4018
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8916184971098265,
-            "recall": 0.468133535660091,
-            "f1": 0.6139303482587065,
-            "flagged": 692
+            "precision": 0.8242271746944644,
+            "recall": 0.4539695109879232,
+            "f1": 0.5854717222009447,
+            "flagged": 2782
           },
-          "fit_seconds": 1.14
+          "fit_seconds": 4.47
         },
         {
           "detector": "Autoencoder (V2's 3 features)",
-          "roc_auc_test": 0.7114956181796442,
+          "roc_auc_test": 0.8609821265043672,
           "at_deployed_alert_rate": {
-            "precision": 0.7538461538461538,
-            "recall": 0.5948406676783005,
-            "f1": 0.6649703138252756,
-            "flagged": 1040
+            "precision": 0.7568466854363962,
+            "recall": 0.5854286279944565,
+            "f1": 0.6601920071444519,
+            "flagged": 3907
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8866213151927438,
-            "recall": 0.5933232169954477,
-            "f1": 0.7109090909090909,
-            "flagged": 882
+            "precision": 0.9435124957206437,
+            "recall": 0.545634527816274,
+            "f1": 0.6914199698946312,
+            "flagged": 2921
           },
-          "fit_seconds": 2.44
+          "fit_seconds": 1.18
         },
         {
           "detector": "Autoencoder (all 7 features)",
-          "roc_auc_test": 0.8202657098457267,
+          "roc_auc_test": 0.7856606244935191,
           "at_deployed_alert_rate": {
-            "precision": 0.3841754051477598,
-            "recall": 0.30576631259484066,
-            "f1": 0.3405154203633291,
-            "flagged": 1049
+            "precision": 0.39869281045751637,
+            "recall": 0.3260740447436151,
+            "f1": 0.3587453713787846,
+            "flagged": 4131
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.3708558211256746,
-            "recall": 0.36494688922610014,
-            "f1": 0.3678776290630975,
-            "flagged": 1297
+            "precision": 0.4161189899688689,
+            "recall": 0.47634131855078204,
+            "f1": 0.44419828302409303,
+            "flagged": 5782
           },
-          "fit_seconds": 3.29
+          "fit_seconds": 13.52
         }
       ]
     },
     {
       "seed": 1,
-      "train_blocks": 105000,
-      "test_blocks": 45000,
-      "test_anomalies": 1318,
+      "train_blocks": 402542,
+      "test_blocks": 172519,
+      "test_anomalies": 5051,
       "results": [
         {
           "detector": "Isolation Forest (V2 settings)",
-          "roc_auc_test": 0.9429019578594615,
+          "roc_auc_test": 0.8882434293335975,
           "at_deployed_alert_rate": {
-            "precision": 0.7295742232451093,
-            "recall": 0.48103186646433993,
-            "f1": 0.5797896662094193,
-            "flagged": 869
+            "precision": 0.6534653465346535,
+            "recall": 0.4704019006137399,
+            "f1": 0.5470242891677218,
+            "flagged": 3636
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.9038167938931297,
-            "recall": 0.44916540212443096,
-            "f1": 0.6001013684744044,
-            "flagged": 655
+            "precision": 0.8242811501597445,
+            "recall": 0.45971094832706394,
+            "f1": 0.5902389425521098,
+            "flagged": 2817
           },
-          "fit_seconds": 1.13
+          "fit_seconds": 4.34
         },
         {
           "detector": "Autoencoder (V2's 3 features)",
-          "roc_auc_test": 0.7106120163251877,
+          "roc_auc_test": 0.8638294334847161,
           "at_deployed_alert_rate": {
-            "precision": 0.6511627906976745,
-            "recall": 0.4673748103186646,
-            "f1": 0.5441696113074205,
-            "flagged": 946
+            "precision": 0.6589550298934235,
+            "recall": 0.5018808156800634,
+            "f1": 0.5697909642616318,
+            "flagged": 3847
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8147013782542113,
-            "recall": 0.40364188163884673,
-            "f1": 0.5398274987316083,
-            "flagged": 653
+            "precision": 0.6376509787588505,
+            "recall": 0.6062165907741042,
+            "f1": 0.6215365878412666,
+            "flagged": 4802
           },
-          "fit_seconds": 2.34
+          "fit_seconds": 1.35
         },
         {
           "detector": "Autoencoder (all 7 features)",
-          "roc_auc_test": 0.7328102038883727,
+          "roc_auc_test": 0.8114002963831073,
           "at_deployed_alert_rate": {
-            "precision": 0.44108761329305135,
-            "recall": 0.3323216995447648,
-            "f1": 0.37905668541756815,
-            "flagged": 993
+            "precision": 0.05994962216624685,
+            "recall": 0.04711938230053455,
+            "f1": 0.052765768761778076,
+            "flagged": 3970
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.3804692454026633,
-            "recall": 0.4552352048558422,
-            "f1": 0.41450777202072536,
-            "flagged": 1577
+            "precision": 0.23126760563380283,
+            "recall": 0.3250841417541081,
+            "f1": 0.2702658217430664,
+            "flagged": 7100
           },
-          "fit_seconds": 3.5
+          "fit_seconds": 6.68
         }
       ]
     },
     {
       "seed": 7,
-      "train_blocks": 105000,
-      "test_blocks": 45000,
-      "test_anomalies": 1318,
+      "train_blocks": 402542,
+      "test_blocks": 172519,
+      "test_anomalies": 5051,
       "results": [
         {
           "detector": "Isolation Forest (V2 settings)",
-          "roc_auc_test": 0.9434797125646459,
+          "roc_auc_test": 0.8861427127111712,
           "at_deployed_alert_rate": {
-            "precision": 0.7259507829977628,
-            "recall": 0.49241274658573597,
-            "f1": 0.5867992766726944,
-            "flagged": 894
+            "precision": 0.6354194407456725,
+            "recall": 0.4723817065927539,
+            "f1": 0.5419032477856007,
+            "flagged": 3755
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.926040061633282,
-            "recall": 0.4559939301972686,
-            "f1": 0.6110828673106253,
-            "flagged": 649
+            "precision": 0.8212110354711573,
+            "recall": 0.45377153039002177,
+            "f1": 0.5845447589900535,
+            "flagged": 2791
           },
-          "fit_seconds": 1.15
+          "fit_seconds": 4.39
         },
         {
           "detector": "Autoencoder (V2's 3 features)",
-          "roc_auc_test": 0.8410434715819998,
+          "roc_auc_test": 0.7002209157424755,
           "at_deployed_alert_rate": {
-            "precision": 0.6087408949011447,
-            "recall": 0.44385432473444614,
-            "f1": 0.5133830627468188,
-            "flagged": 961
+            "precision": 0.4668474984930681,
+            "recall": 0.3066719461492774,
+            "f1": 0.37017564822559446,
+            "flagged": 3318
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.6087408949011447,
-            "recall": 0.44385432473444614,
-            "f1": 0.5133830627468188,
-            "flagged": 961
+            "precision": 0.5839331321105178,
+            "recall": 0.49792120372203524,
+            "f1": 0.5375080145330199,
+            "flagged": 4307
           },
-          "fit_seconds": 2.31
+          "fit_seconds": 9.77
         },
         {
           "detector": "Autoencoder (all 7 features)",
-          "roc_auc_test": 0.8286929160877773,
+          "roc_auc_test": 0.8680633104235193,
           "at_deployed_alert_rate": {
-            "precision": 0.5432692307692307,
-            "recall": 0.4286798179059181,
-            "f1": 0.47921967769296014,
-            "flagged": 1040
+            "precision": 0.3473874806001035,
+            "recall": 0.2658879429815878,
+            "f1": 0.3012223842099361,
+            "flagged": 3866
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.5460717749757517,
-            "recall": 0.4271623672230653,
-            "f1": 0.47935291613452535,
-            "flagged": 1031
+            "precision": 0.34846113719353156,
+            "recall": 0.39675311819441694,
+            "f1": 0.37104239955563784,
+            "flagged": 5751
           },
-          "fit_seconds": 3.37
+          "fit_seconds": 9.92
         }
       ]
     },
     {
       "seed": 123,
-      "train_blocks": 105000,
-      "test_blocks": 45000,
-      "test_anomalies": 1318,
+      "train_blocks": 402542,
+      "test_blocks": 172519,
+      "test_anomalies": 5051,
       "results": [
         {
           "detector": "Isolation Forest (V2 settings)",
-          "roc_auc_test": 0.9402806192971843,
+          "roc_auc_test": 0.9280464297012567,
           "at_deployed_alert_rate": {
-            "precision": 0.7141304347826087,
-            "recall": 0.4984825493171472,
-            "f1": 0.5871313672922251,
-            "flagged": 920
+            "precision": 0.5686322485931,
+            "recall": 0.46010690952286676,
+            "f1": 0.5086452177719414,
+            "flagged": 4087
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8936484490398818,
-            "recall": 0.4590288315629742,
-            "f1": 0.606516290726817,
-            "flagged": 677
+            "precision": 0.810242020343739,
+            "recall": 0.4573351811522471,
+            "f1": 0.5846621108580107,
+            "flagged": 2851
           },
-          "fit_seconds": 1.1
+          "fit_seconds": 4.38
         },
         {
           "detector": "Autoencoder (V2's 3 features)",
-          "roc_auc_test": 0.8454896798971793,
+          "roc_auc_test": 0.6924832428057706,
           "at_deployed_alert_rate": {
-            "precision": 0.5207939508506616,
-            "recall": 0.4180576631259484,
-            "f1": 0.46380471380471383,
-            "flagged": 1058
+            "precision": 0.3991484832357637,
+            "recall": 0.2969708968521085,
+            "f1": 0.340560790101033,
+            "flagged": 3758
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8872053872053872,
-            "recall": 0.3998482549317147,
-            "f1": 0.551255230125523,
-            "flagged": 594
+            "precision": 0.9634703196347032,
+            "recall": 0.2506434369431796,
+            "f1": 0.3978004713275727,
+            "flagged": 1314
           },
-          "fit_seconds": 2.39
+          "fit_seconds": 2.69
         },
         {
           "detector": "Autoencoder (all 7 features)",
-          "roc_auc_test": 0.8299058136334895,
+          "roc_auc_test": 0.8193233979137592,
           "at_deployed_alert_rate": {
-            "precision": 0.41529525653436594,
-            "recall": 0.3254931714719272,
-            "f1": 0.364951084644832,
-            "flagged": 1033
+            "precision": 0.5856822150162135,
+            "recall": 0.46485844387250047,
+            "f1": 0.5183222958057395,
+            "flagged": 4009
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.38071065989847713,
-            "recall": 0.5690440060698028,
-            "f1": 0.4562043795620438,
-            "flagged": 1970
+            "precision": 0.7436564736499675,
+            "recall": 0.45258364680261337,
+            "f1": 0.5627076923076924,
+            "flagged": 3074
           },
-          "fit_seconds": 3.4
+          "fit_seconds": 2.0
         }
       ]
     },
     {
       "seed": 2024,
-      "train_blocks": 105000,
-      "test_blocks": 45000,
-      "test_anomalies": 1318,
+      "train_blocks": 402542,
+      "test_blocks": 172519,
+      "test_anomalies": 5051,
       "results": [
         {
           "detector": "Isolation Forest (V2 settings)",
-          "roc_auc_test": 0.9364591061943823,
+          "roc_auc_test": 0.8842683163747831,
           "at_deployed_alert_rate": {
-            "precision": 0.6453900709219859,
-            "recall": 0.48330804248861914,
-            "f1": 0.5527114967462039,
-            "flagged": 987
+            "precision": 0.5881474103585658,
+            "recall": 0.4676301722431202,
+            "f1": 0.5210102569758465,
+            "flagged": 4016
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.8698224852071006,
-            "recall": 0.44613050075872535,
-            "f1": 0.5897693079237714,
-            "flagged": 676
+            "precision": 0.8162316767965677,
+            "recall": 0.4519897050089091,
+            "f1": 0.5818042813455657,
+            "flagged": 2797
           },
-          "fit_seconds": 1.19
+          "fit_seconds": 4.39
         },
         {
           "detector": "Autoencoder (V2's 3 features)",
-          "roc_auc_test": 0.6391167778382304,
+          "roc_auc_test": 0.6533327161148181,
           "at_deployed_alert_rate": {
-            "precision": 0.6619144602851323,
-            "recall": 0.2465857359635812,
-            "f1": 0.359314538419016,
-            "flagged": 491
+            "precision": 0.8042590431738623,
+            "recall": 0.5458325084141754,
+            "f1": 0.6503125368557613,
+            "flagged": 3428
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.6619144602851323,
-            "recall": 0.2465857359635812,
-            "f1": 0.359314538419016,
-            "flagged": 491
+            "precision": 0.9395904436860069,
+            "recall": 0.5450405860225698,
+            "f1": 0.6898884851522366,
+            "flagged": 2930
           },
-          "fit_seconds": 2.28
+          "fit_seconds": 2.62
         },
         {
           "detector": "Autoencoder (all 7 features)",
-          "roc_auc_test": 0.7874734189065002,
+          "roc_auc_test": 0.7180554590815027,
           "at_deployed_alert_rate": {
-            "precision": 0.4746666666666667,
-            "recall": 0.40515933232169954,
-            "f1": 0.43716741711011053,
-            "flagged": 1125
+            "precision": 0.25570436507936506,
+            "recall": 0.20411799643634923,
+            "f1": 0.22701750522954972,
+            "flagged": 4032
           },
           "at_train_best_f1_threshold": {
-            "precision": 0.4578111946532999,
-            "recall": 0.4157814871016692,
-            "f1": 0.4357852882703777,
-            "flagged": 1197
+            "precision": 0.28565680949507144,
+            "recall": 0.28113244901999607,
+            "f1": 0.28337657154260626,
+            "flagged": 4971
           },
-          "fit_seconds": 3.45
+          "fit_seconds": 10.38
         }
       ]
     }

@@ -1,7 +1,7 @@
 {
   "source": "cloudtrail",
   "title": "AWS CloudTrail (flAWS.cloud, WEAK labels)",
-  "generated_at": "2026-11-12T12:41:45+0530",
+  "generated_at": "2026-11-14T00:03:01+0530",
   "data_kind": "real",
   "label_kind": "WEAK rule-based",
   "label_description": "WEAK, rule-based labels (not ground truth). An (identity, 1-hour) block is Anomaly if R1: >= 10 events with an AccessDenied/Unauthorized errorCode, or R2: a sensitive IAM write (Create*/Delete*/Attach*/Detach*/Put*/Update*/Add*/Remove*/Upload*/Set*/Change*) or S3 permission/policy change from a source IP first seen in the trace during that same hour.",
@@ -73,6 +73,15 @@
     "source_ip_encoded",
     "destination_ip_encoded"
   ],
+  "feature_separability": {
+    "hour_of_day": 0.5094,
+    "component_encoded": 0.868,
+    "event_type_encoded": 0.8785,
+    "block_size": 0.5,
+    "event_frequency": 0.9776,
+    "source_ip_encoded": 0.6456,
+    "destination_ip_encoded": 0.5
+  },
   "models": {
     "v1_baseline": {
       "accuracy": 0.7617552570093458,
@@ -154,10 +163,10 @@
       },
       "ga_best_fitness": 0.6331309627059843,
       "ga_generations": 12,
-      "ga_seconds": 77.91917033299978
+      "ga_seconds": 77.29041450005025
     },
     "promotion": {
-      "timestamp": "2026-11-12T07:11:37.764244+00:00",
+      "timestamp": "2026-11-13T18:32:52.001097+00:00",
       "metric": "f1",
       "promoted": true,
       "current_version": 1,
@@ -180,32 +189,32 @@
     "protocol": "50/50 stratified tune/holdout",
     "policy": {
       "weights": {
-        "anomaly_score": 0.4089567856164633,
-        "event_frequency": 0.007773308200080872,
-        "block_size": 0.5832699061834558
+        "anomaly_score": 0.5195896184089284,
+        "event_frequency": 0.023699342634702834,
+        "block_size": 0.4567110389563688
       },
       "error_weight": 0.2,
       "thresholds": {
-        "hot": 0.555156745646443,
-        "warm": 0.48598733796322763
+        "hot": 0.5381768060466986,
+        "warm": 0.3734304928265284
       },
-      "summary_fraction": 0.027226926103765696
+      "summary_fraction": 0.02204758906481274
     },
     "holdout": {
-      "storage_saved_pct": 11.83430171297829,
-      "weighted_retention": 0.9430199430199431,
-      "full_retention": 0.886039886039886,
+      "storage_saved_pct": 11.07653947571141,
+      "weighted_retention": 0.9581059624423124,
+      "full_retention": 0.9572649572649573,
       "coverage": 1.0,
-      "fitness": 4.8542447329214085,
-      "meets_retention_target": false,
+      "fitness": 11.07653947571141,
+      "meets_retention_target": true,
       "tier_counts": {
-        "HOT": 922,
-        "WARM": 1131,
-        "COLD": 20773
+        "HOT": 980,
+        "WARM": 1240,
+        "COLD": 20606
       },
       "tier_anomalies": {
-        "HOT": 311,
-        "WARM": 40,
+        "HOT": 336,
+        "WARM": 15,
         "COLD": 0
       },
       "n_blocks": 22826,
@@ -237,19 +246,19 @@
         "meets_retention_target": false
       },
       "top_k_percent_same_savings": {
-        "storage_saved_pct": 11.835541333371113,
-        "weighted_retention": 0.7293447293447294,
-        "full_retention": 0.7293447293447294,
-        "coverage": 0.7293447293447294,
-        "fitness": -208.81972932189947,
+        "storage_saved_pct": 11.079195805124586,
+        "weighted_retention": 0.7492877492877493,
+        "full_retention": 0.7492877492877493,
+        "coverage": 0.7492877492877493,
+        "fitness": -189.63305490712605,
         "meets_retention_target": false
       },
       "random_sampling_same_savings": {
-        "storage_saved_pct": 11.841491511256638,
-        "weighted_retention": 0.8723646723646723,
-        "full_retention": 0.8723646723646723,
-        "coverage": 0.8723646723646723,
-        "fitness": -65.79383612407102,
+        "storage_saved_pct": 11.074644627396673,
+        "weighted_retention": 0.8811965811965813,
+        "full_retention": 0.8811965811965813,
+        "coverage": 0.8811965811965813,
+        "fitness": -57.72877417602199,
         "meets_retention_target": false
       }
     },
@@ -1547,7 +1556,9 @@
             "mean_over_true_alerts": 0.952525974357693,
             "median_over_true_alerts": 0.9938377764695989,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.11727181604231607
+            "expected_lead_per_alert": 0.11727181604231607,
+            "mean_seconds_over_true_alerts": 1842.472027972028,
+            "median_seconds_over_true_alerts": 1757.5
           }
         },
         "test": {
@@ -1567,7 +1578,9 @@
             "mean_over_true_alerts": 0.9501137799018649,
             "median_over_true_alerts": 0.995247405624906,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.11769641229553571
+            "expected_lead_per_alert": 0.11769641229553571,
+            "mean_seconds_over_true_alerts": 1884.1451612903227,
+            "median_seconds_over_true_alerts": 1911.5
           },
           "caught": "caught 124 of 211"
         },
@@ -1588,7 +1601,9 @@
             "mean_over_true_alerts": 0.9501137799018649,
             "median_over_true_alerts": 0.995247405624906,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.15942369243278923
+            "expected_lead_per_alert": 0.15942369243278923,
+            "mean_seconds_over_true_alerts": 1884.1451612903227,
+            "median_seconds_over_true_alerts": 1911.5
           },
           "blocks": 2295,
           "anomalies": 208
@@ -2876,7 +2891,9 @@
             "mean_over_true_alerts": 0.9086285600624731,
             "median_over_true_alerts": 0.9886104783599089,
             "share_of_true_alerts_before_block_end": 0.9959839357429718,
-            "expected_lead_per_alert": 0.1419375856057439
+            "expected_lead_per_alert": 0.1419375856057439,
+            "mean_seconds_over_true_alerts": 1645.3935742971887,
+            "median_seconds_over_true_alerts": 1116.0
           }
         },
         "test": {
@@ -2896,7 +2913,9 @@
             "mean_over_true_alerts": 0.9009765689790664,
             "median_over_true_alerts": 0.9842021722637064,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.15973768096985003
+            "expected_lead_per_alert": 0.15973768096985003,
+            "mean_seconds_over_true_alerts": 1570.8157894736842,
+            "median_seconds_over_true_alerts": 1453.5
           },
           "caught": "caught 114 of 211"
         },
@@ -2917,7 +2936,9 @@
             "mean_over_true_alerts": 0.9009765689790664,
             "median_over_true_alerts": 0.9842021722637064,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.19091325067586165
+            "expected_lead_per_alert": 0.19091325067586165,
+            "mean_seconds_over_true_alerts": 1570.8157894736842,
+            "median_seconds_over_true_alerts": 1453.5
           },
           "blocks": 1617,
           "anomalies": 207
@@ -4205,7 +4226,9 @@
             "mean_over_true_alerts": 0.8475390567220299,
             "median_over_true_alerts": 0.9769585253456221,
             "share_of_true_alerts_before_block_end": 0.9971988795518207,
-            "expected_lead_per_alert": 0.12788311210894535
+            "expected_lead_per_alert": 0.12788311210894535,
+            "mean_seconds_over_true_alerts": 1664.3305322128851,
+            "median_seconds_over_true_alerts": 1460.0
           }
         },
         "test": {
@@ -4225,7 +4248,9 @@
             "mean_over_true_alerts": 0.8418090127411986,
             "median_over_true_alerts": 0.9684542586750788,
             "share_of_true_alerts_before_block_end": 0.9939393939393939,
-            "expected_lead_per_alert": 0.1325367243342536
+            "expected_lead_per_alert": 0.1325367243342536,
+            "mean_seconds_over_true_alerts": 1580.5151515151515,
+            "median_seconds_over_true_alerts": 1421.0
           },
           "caught": "caught 165 of 211"
         },
@@ -4246,7 +4271,9 @@
             "mean_over_true_alerts": 0.8469419945262059,
             "median_over_true_alerts": 0.9690295609484817,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.24803301268267458
+            "expected_lead_per_alert": 0.24803301268267458,
+            "mean_seconds_over_true_alerts": 1590.1524390243903,
+            "median_seconds_over_true_alerts": 1455.0
           },
           "blocks": 1194,
           "anomalies": 205
@@ -5534,7 +5561,9 @@
             "mean_over_true_alerts": 0.7354781929632356,
             "median_over_true_alerts": 0.9640933572710951,
             "share_of_true_alerts_before_block_end": 0.8225255972696246,
-            "expected_lead_per_alert": 0.18513325647614093
+            "expected_lead_per_alert": 0.18513325647614093,
+            "mean_seconds_over_true_alerts": 1626.7849829351535,
+            "median_seconds_over_true_alerts": 1260.0
           }
         },
         "test": {
@@ -5554,7 +5583,9 @@
             "mean_over_true_alerts": 0.7217466200498397,
             "median_over_true_alerts": 0.9436308372478586,
             "share_of_true_alerts_before_block_end": 0.8680555555555556,
-            "expected_lead_per_alert": 0.1979647872136703
+            "expected_lead_per_alert": 0.1979647872136703,
+            "mean_seconds_over_true_alerts": 1443.1875,
+            "median_seconds_over_true_alerts": 1141.0
           },
           "caught": "caught 144 of 211"
         },
@@ -5575,7 +5606,9 @@
             "mean_over_true_alerts": 0.8314521062974153,
             "median_over_true_alerts": 0.9697885196374623,
             "share_of_true_alerts_before_block_end": 1.0,
-            "expected_lead_per_alert": 0.3752040190872813
+            "expected_lead_per_alert": 0.3752040190872813,
+            "mean_seconds_over_true_alerts": 1662.552,
+            "median_seconds_over_true_alerts": 1417.0
           },
           "blocks": 852,
           "anomalies": 182
@@ -5680,5 +5713,5 @@
     "vocab": "data/features/cloudtrail/category_encoders.json",
     "cleaned": "data/processed/cloudtrail/cleaned.csv"
   },
-  "wall_clock_seconds": 143.8
+  "wall_clock_seconds": 144.0
 }

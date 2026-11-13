@@ -99,15 +99,15 @@ Every model is scored on all 575,061 blocks, the same blocks it was fitted on (`
 
 ### Held-out performance
 
-`scripts/evaluate_holdout.py` refits each version's hyperparameters on a stratified 70% split and scores the unseen 30% (`data/evaluation/holdout_comparison.json`). The local run uses a 150,000-block stratified sample of complete blocks (4,392 anomalies), not all 575,061 blocks.
+`scripts/evaluate_holdout.py` refits each version's hyperparameters on a stratified 70% split of all 575,061 blocks and scores the unseen 30% (172,519 blocks, 5,051 anomalies), repeated over five splits (`data/evaluation/holdout_comparison.json`).
 
 | Model | Train F1 | Test F1 | Test F1 over 5 splits |
 |---|---|---|---|
-| V1 | 0.1692 | 0.1680 | 0.169 ± 0.008 |
-| **V2 (deployed)** | 0.5616 | **0.5708** | **0.575 ± 0.013** |
-| V3 | 0.5662 | 0.5760 | 0.564 ± 0.007 |
+| V1 | 0.1364 | 0.1370 | 0.128 ± 0.008 |
+| **V2 (deployed)** | 0.5255 | **0.5224** | **0.528 ± 0.014** |
+| V3 (rolled back) | 0.5610 | 0.5539 | 0.555 ± 0.009 |
 
-The GA improves F1 over the baseline 4.4x in-sample (0.1191 to 0.5288) and 3.4x held out (0.169 to 0.575), while using 3 of the 7 features. Train and test F1 are level, so the model does not overfit. V2 and V3 are tied on unseen data. Why V3 was rolled back and V2 kept is recorded in `data/evaluation/v1_v2_v3_comparison.md`.
+The GA improves F1 over the baseline 4.4x in-sample (0.1191 to 0.5288) and 4.1x held out (0.128 to 0.528), while using 3 of the 7 features. Train and test F1 are level, so the models do not overfit. **V3 is better on unseen data**: higher F1 on all five splits (0.555 against 0.528), with higher precision at about the same recall. It is not deployed because it was rolled back by hand on 9 Sep, and Smart Storage, Early Warning and streaming were tuned on V2. Why V3 was rolled back and V2 kept is recorded in `data/evaluation/v1_v2_v3_comparison.md`.
 
 ---
 
@@ -180,31 +180,31 @@ The diagram shows Smart Storage after the anomaly-score step, the Kafka streamin
 - Split: 287,530 tuning blocks and 287,531 held-out blocks, each with 8,419 anomalies.
 
 **Learned policy:**
-- Weights 0.750 (anomaly score), 0.073 (event frequency), 0.177 (block size).
-- HOT threshold 0.1723, WARM threshold 0.0493, summary fraction 0.0565.
+- Weights 0.916 (anomaly score), 0.056 (event frequency), 0.028 (block size).
+- HOT threshold 0.1190, WARM threshold 0.1163, summary fraction 0.417 (WARM keeps 1 metadata line plus about 42% of the block).
 
 **Held-out results.** The "clean" column uses the tune-half refit. The "deployed" column scores with the deployed model, which was fitted on all blocks; it's kept for comparison.
 
 | Policy | Saved % (clean) | Weighted retention (clean) | Fitness (clean) | Saved % (deployed) | Weighted retention (deployed) |
 |---|---|---|---|---|---|
-| **GA policy** | **68.76** | **0.9676** | **68.76** | 64.19 | 0.9662 |
+| **GA policy** | **66.41** | **0.9484** | **64.80** | 64.19 | 0.9511 |
 | Keep all | 0.00 | 1.0000 | 0.00 | 0.00 | 1.0000 |
 | Keep only model-flagged blocks | 93.00 | 0.4559 | -401.13 | 92.74 | 0.4691 |
 | Top-k% by score, k tuned on tune half (k = 38.74%) | 58.49 | 0.9461 | 54.57 | 55.76 | 0.9408 |
-| Top-k% by score at the GA's saving | 68.76 | 0.9425 | 61.27 | 64.19 | 0.7215 |
-| Random sampling at the GA's saving | 68.76 | 0.2745 | -606.77 | 64.19 | 0.3223 |
+| Top-k% by score at the GA's saving | 66.41 | 0.9425 | 58.92 | 64.19 | 0.7215 |
+| Random sampling at the GA's saving | 66.41 | 0.2989 | -584.69 | 64.19 | 0.3223 |
 
 **Held-out tiers.**
 
 | Tier | Blocks | Lines kept | Anomalies |
 |---|---|---|---|
-| HOT | 62,961 | 1,520,577 | 7,877 |
-| WARM | 215,399 | 215,449 | 539 |
-| COLD | 9,171 | 9,171 | 3 |
+| HOT | 64,230 | 1,549,254 | 7,933 |
+| WARM | 10,422 | 114,642 | 103 |
+| COLD | 212,879 | 212,879 | 383 |
 
-That is 1,745,197 of 5,587,093 lines kept. Full (HOT-only) retention is 0.9356 and coverage (HOT + WARM) is 0.9996.
+That is 1,876,775 of 5,587,093 lines kept. Full (HOT-only) retention is 0.942, weighted 0.948 and coverage (HOT + WARM) 0.955. The weighted retention is 0.2 points under the 0.95 target on these unseen blocks; the tuning half meets it, and the GA still beats every baseline on the penalised fitness.
 
-**Fixed since these numbers.** The table above used the old rule: WARM held 74.9% of held-out blocks, and 99.98% of them kept exactly one line, the cost of COLD but with a flat 0.5 credit. WARM now keeps one metadata line plus `round(f x lines)` summary lines, and a WARM anomaly earns `0.5 x min(1, summary_lines / (0.25 x lines))`. On a 150,000-block sample the GA then saves 68.42% with full retention 0.9504, weighted 0.9517 and coverage 0.9668, and still beats every baseline. The full-dataset rerun is pending.
+**The WARM fix behind these numbers.** Under the old rule, WARM held 74.9% of held-out blocks and 99.98% of them kept exactly one line, the cost of COLD but with a flat 0.5 credit; that gave 68.76% saved and weighted retention 0.968 with only 0.936 kept in full. WARM now keeps one metadata line plus `round(f x lines)` summary lines, and a WARM anomaly earns `0.5 x min(1, summary_lines / (0.25 x lines))`. Free credit gone, the GA keeps more anomalies in full (0.942), saves a little less (66.41%), and uses WARM as a real summary tier.
 
 ---
 
@@ -303,7 +303,7 @@ That leaves 49,675 events in 2,069 sessions, of which 198 (9.57%) are from the a
 - Features: `hour_of_day`, `block_size`, `event_frequency`, `source_ip_encoded`, `destination_ip_encoded`.
 - Hyperparameters: `n_estimators` 175, `max_samples` 0.344, `contamination` 0.187.
 
-**Smart Storage on OpenStack.** On 1,035 held-out sessions (99 anomalies) it saves 31.42% of lines. Weighted retention is 0.9293, below the 0.95 target; full retention is 0.8687 and coverage 0.9899.
+**Smart Storage on OpenStack.** On 1,035 held-out sessions (99 anomalies) it saves 22.27% of lines. Weighted, full retention and coverage are all 0.990, meeting the 0.95 target (fixed WARM rule; before it, 31.42% saved at weighted 0.929).
 
 **Early warning on OpenStack.** The test set has 59 anomalous sessions.
 - At k = 3, 5 and 10, the tuned threshold alerts on every session: precision 0.095 (the base rate), recall 1.0, F1 0.1735.
@@ -346,15 +346,15 @@ All routes are under `/api/`, and every data route takes `?source=hdfs|openstack
 
 ### 12.1 Extra detector: Autoencoder vs Isolation Forest (done)
 
-`scripts/compare_autoencoder.py` runs both detectors unsupervised on the same five stratified 70/30 HDFS splits (`data/evaluation/autoencoder_comparison.json`). The Autoencoder standardizes its features first. Both are scored at the deployed model's alert rate. The data is the 150,000-block sample.
+`scripts/compare_autoencoder.py` runs both detectors unsupervised on the same five stratified 70/30 splits of all 575,061 HDFS blocks (`data/evaluation/autoencoder_comparison.json`). The Autoencoder standardizes its features first. Both are scored at the deployed model's alert rate.
 
 | Detector | Test F1 | ROC AUC | Fit time |
 |---|---|---|---|
-| **Isolation Forest (V2 settings)** | **0.575 ± 0.013** | **0.941** | 1.1 s |
-| Autoencoder, V2's 3 features | 0.509 ± 0.100 | 0.750 | 2.4 s |
-| Autoencoder, all 7 features | 0.400 ± 0.051 | 0.800 | 3.4 s |
+| **Isolation Forest (V2 settings)** | **0.528 ± 0.014** | **0.895** | 4.4 s |
+| Autoencoder, V2's 3 features | 0.518 ± 0.137 | 0.754 | 3.5 s |
+| Autoencoder, all 7 features | 0.292 ± 0.153 | 0.801 | 8.5 s |
 
-Isolation Forest is more accurate, much more stable across splits, and faster. That is why it stays the detector.
+On average the 3-feature Autoencoder comes close to Isolation Forest, but it swings ten times as much between splits (±0.137 against ±0.014) and ranks anomalies clearly worse (AUC 0.754 against 0.895). With all seven features it is far worse. A detector whose F1 can land anywhere from about 0.3 to 0.65 depending on the split is not one to deploy, so Isolation Forest stays.
 
 ### 12.2 Analyst feedback loop (done)
 
