@@ -50,11 +50,14 @@ def _latest_status(run_id: str | None, source: str | None = None):
 @token_required
 def get_status():
     try:
-        status = _latest_status(request.args.get("run_id"), request.args.get("source"))
+        source = request.args.get("source")
+        status = _latest_status(request.args.get("run_id"), source)
     except PyMongoError as exc:
         return jsonify({"error": f"MongoDB unavailable: {exc.__class__.__name__}"}), 503
     if status is None:
-        return jsonify({"live": False, "error": "No stream processor has reported yet. Start it with `python3 -m streaming.processor`."}), 404
+        flag = f" --source {source}" if source and source != "hdfs" else ""
+        return jsonify({"live": False, "error": f"Start the processor with `python3 -m streaming.processor{flag}`, "
+                                                f"then replay logs with `python3 -m streaming.producer{flag}`."}), 404
 
     updated = datetime.fromisoformat(status["updated_at"])
     age = (datetime.now(timezone.utc) - updated).total_seconds()
