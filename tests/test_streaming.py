@@ -404,6 +404,11 @@ class StreamApiTest(unittest.TestCase):
     def test_status_404_before_any_processor_reported(self):
         self.status_docs.clear()
         self.assertEqual(self.get("/api/stream/status").status_code, 404)
+        # The start-up hint names the source the page is showing.
+        hint = self.get("/api/stream/status?source=django").get_json()["error"]
+        self.assertIn("streaming.processor --source django", hint)
+        self.assertIn("streaming.producer --source django", hint)
+        self.assertNotIn("--source", self.get("/api/stream/status?source=hdfs").get_json()["error"])
 
     def test_alerts_default_to_the_newest_run_newest_first(self):
         body = self.get("/api/stream/alerts").get_json()
