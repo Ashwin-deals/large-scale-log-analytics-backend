@@ -40,7 +40,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        for topic in logs.raw alerts storage.decisions; do
+        for topic in logs.raw logs.raw.openstack logs.raw.apache logs.raw.cloudtrail logs.raw.django alerts storage.decisions; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 --create --if-not-exists \
             --topic "$$topic" --partitions 3 --replication-factor 1
         done

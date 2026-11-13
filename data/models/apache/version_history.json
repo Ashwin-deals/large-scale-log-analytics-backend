@@ -1,13 +1,13 @@
 [
   {
-    "timestamp": "2026-11-12T07:09:20.368182+00:00",
+    "timestamp": "2026-11-13T16:44:59.100711+00:00",
     "metric": "f1",
     "promoted": true,
     "current_version": 1,
     "current_model_path": "data/models/apache/isolation_forest_v1.pkl",
-    "current_metric_value": 0.33636363636363636,
+    "current_metric_value": 0.3008130081300813,
     "candidate_model_path": "data/models/apache/isolation_forest_candidate.pkl",
-    "candidate_metric_value": 0.7218934911242604,
+    "candidate_metric_value": 0.6068965517241379,
     "new_version": 2,
     "promoted_model_path": "data/models/apache/isolation_forest_v2.pkl",
     "promoted_metrics_path": "data/evaluation/apache_metrics/isolation_forest_v2_metrics.json",

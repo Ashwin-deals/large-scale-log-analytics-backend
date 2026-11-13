@@ -1,5 +1,8 @@
 # MorphGuard — Large-Scale Log Analytics for Cloud Security
 
+![MorphGuard architecture](docs/architecture_diagram.svg)
+
+
 ## Overview
 MorphGuard is an evolutionary real-time log analytics system for detecting anomalies in cloud environments using streaming technologies and machine learning. The name reflects the two halves of the system: behaviour that *morphs* — models continuously re-optimised by a genetic algorithm — in service of *guarding* the cloud estate.
 
@@ -132,18 +135,26 @@ Upload an OpenStack log with `source=openstack` on `POST /api/sources/upload`, o
 selector on the Log Sources page.
 
 ## Technologies
-- Python
-- Django
-- Apache Kafka (single KRaft broker via `docker-compose.yml`, `confluent-kafka` client)
-- Pandas
-- Scikit-learn
-- PyGAD (Genetic Algorithm)
-- PostgreSQL
-- Docker
-- Chart.js
+- Python 3.11+ (3.12 in CI), Flask, Gunicorn
+- Pandas, NumPy, scikit-learn (Isolation Forest), PyGAD (genetic algorithm)
+- MongoDB Atlas (accounts, uploads, stream alerts, analyst feedback), bcrypt, JWT
+- Apache Kafka (single KRaft broker via `docker-compose.yml`, `confluent-kafka` client), with a Python stream processor
+- Hugging Face Hub (datasets and derived files)
+- Docker; nginx on a GCP VM
+- Frontend: React 18 + Vite, Recharts (separate repo)
+
+The Django logs are a synthetic data source. Django is not part of the stack.
 
 ## Project Status
-Phase 1: Architecture Design & Tool Selection
+Review-ready.
+- **Sources:** five log sources (HDFS, OpenStack, Apache, CloudTrail, Django).
+- **Pipeline:** each has its own parser, models, promote-if-better lineage, Smart Storage policy and early warning.
+- **API and dashboard:** every source is served through `?source=` on every endpoint and dashboard page.
+- **Streaming:** works for every source.
+- **Feedback:** analyst verdicts feed the next retrain.
+- **Model choice:** an Autoencoder is benchmarked against Isolation Forest.
+
+`docs/project_report.md` has the results and their limitations.
 
 ## Auth API (login/register)
 A minimal Flask + MongoDB service backs the frontend login page.
@@ -157,10 +168,7 @@ python app.py           # runs on http://localhost:5000
 
 Requires a running MongoDB instance (local or Atlas) reachable at `MONGO_URI`. Passwords are hashed with bcrypt before storage — plaintext passwords are never persisted.
 
-Endpoints:
-- `POST /api/auth/register` — `{ email, password, name }`
-- `POST /api/auth/login` — `{ email, password }`
-- `GET /api/health`
+Endpoints: `docs/api_reference.md` lists every route. Auth uses `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/change-password`, `GET /api/auth/me` and `GET /api/health`.
 
 ## Team Members
 Akilan J [CB.SC.U4CSE23002]

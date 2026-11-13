@@ -127,6 +127,9 @@ __marimo__/
 # Hugging Face dataset (see README) — never committed here.
 *.csv
 data/processed/dataset_stats.json
+data/processed/*/dataset_stats.json
+data/processed/*.log
+data/processed/*/*.log
 
 # Raw source logs (HDFS, OpenStack, Apache, CloudTrail, Django): hundreds of MB,
 # downloaded or generated locally -- never committed.

@@ -27,3 +27,4 @@ user_details = db[MONGO_COLLECTION]
 uploads = db["uploads"]
 stream_alerts = db["stream_alerts"]
 stream_status = db["stream_status"]
+alert_feedback = db["alert_feedback"]  # analyst verdicts on alerts (feedback_api.py)

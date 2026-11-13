@@ -1,0 +1,364 @@
+{
+  "generated_at": "2026-11-13T01:45:09+0530",
+  "protocol": "Unsupervised fit on a stratified 70% split, scored on the unseen 30%. Thresholds: the deployed model's alert rate (top contamination share of training scores), and the F1-best threshold on training scores (labels used for the threshold only).",
+  "data": {
+    "blocks": 150000,
+    "anomalies": 4392,
+    "note": "575,061 blocks means the full HDFS corpus; fewer means the local sample."
+  },
+  "deployed_version": 2,
+  "alert_rate": 0.02347061968879934,
+  "summary": {
+    "Isolation Forest (V2 settings)": {
+      "roc_auc_test": {
+        "mean": 0.9412769999539368,
+        "std": 0.002669977557485904
+      },
+      "f1_at_deployed_alert_rate": {
+        "mean": 0.5754483362650094,
+        "std": 0.012827029332960994
+      },
+      "f1_at_train_best_f1_threshold": {
+        "mean": 0.6042800365388649,
+        "std": 0.008630531470613994
+      },
+      "fit_seconds": {
+        "mean": 1.142,
+        "std": 0.029257477676655548
+      }
+    },
+    "Autoencoder (V2's 3 features)": {
+      "roc_auc_test": {
+        "mean": 0.7495515127644482,
+        "std": 0.08091387596065
+      },
+      "f1_at_deployed_alert_rate": {
+        "mean": 0.5091284480206489,
+        "std": 0.10003111556093791
+      },
+      "f1_at_train_best_f1_threshold": {
+        "mean": 0.5349378841864114,
+        "std": 0.11186080601368838
+      },
+      "fit_seconds": {
+        "mean": 2.352,
+        "std": 0.05706137047074847
+      }
+    },
+    "Autoencoder (all 7 features)": {
+      "roc_auc_test": {
+        "mean": 0.7998296124723734,
+        "std": 0.036877035927847114
+      },
+      "f1_at_deployed_alert_rate": {
+        "mean": 0.40018205704576,
+        "std": 0.05071976461380266
+      },
+      "f1_at_train_best_f1_threshold": {
+        "mean": 0.43074559701015397,
+        "std": 0.03808482092293647
+      },
+      "fit_seconds": {
+        "mean": 3.402,
+        "std": 0.07138627319029898
+      }
+    }
+  },
+  "runs": [
+    {
+      "seed": 42,
+      "train_blocks": 105000,
+      "test_blocks": 45000,
+      "test_anomalies": 1318,
+      "results": [
+        {
+          "detector": "Isolation Forest (V2 settings)",
+          "roc_auc_test": 0.9432636038540093,
+          "at_deployed_alert_rate": {
+            "precision": 0.6649848637739657,
+            "recall": 0.5,
+            "f1": 0.5708098744045041,
+            "flagged": 991
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8916184971098265,
+            "recall": 0.468133535660091,
+            "f1": 0.6139303482587065,
+            "flagged": 692
+          },
+          "fit_seconds": 1.14
+        },
+        {
+          "detector": "Autoencoder (V2's 3 features)",
+          "roc_auc_test": 0.7114956181796442,
+          "at_deployed_alert_rate": {
+            "precision": 0.7538461538461538,
+            "recall": 0.5948406676783005,
+            "f1": 0.6649703138252756,
+            "flagged": 1040
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8866213151927438,
+            "recall": 0.5933232169954477,
+            "f1": 0.7109090909090909,
+            "flagged": 882
+          },
+          "fit_seconds": 2.44
+        },
+        {
+          "detector": "Autoencoder (all 7 features)",
+          "roc_auc_test": 0.8202657098457267,
+          "at_deployed_alert_rate": {
+            "precision": 0.3841754051477598,
+            "recall": 0.30576631259484066,
+            "f1": 0.3405154203633291,
+            "flagged": 1049
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.3708558211256746,
+            "recall": 0.36494688922610014,
+            "f1": 0.3678776290630975,
+            "flagged": 1297
+          },
+          "fit_seconds": 3.29
+        }
+      ]
+    },
+    {
+      "seed": 1,
+      "train_blocks": 105000,
+      "test_blocks": 45000,
+      "test_anomalies": 1318,
+      "results": [
+        {
+          "detector": "Isolation Forest (V2 settings)",
+          "roc_auc_test": 0.9429019578594615,
+          "at_deployed_alert_rate": {
+            "precision": 0.7295742232451093,
+            "recall": 0.48103186646433993,
+            "f1": 0.5797896662094193,
+            "flagged": 869
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.9038167938931297,
+            "recall": 0.44916540212443096,
+            "f1": 0.6001013684744044,
+            "flagged": 655
+          },
+          "fit_seconds": 1.13
+        },
+        {
+          "detector": "Autoencoder (V2's 3 features)",
+          "roc_auc_test": 0.7106120163251877,
+          "at_deployed_alert_rate": {
+            "precision": 0.6511627906976745,
+            "recall": 0.4673748103186646,
+            "f1": 0.5441696113074205,
+            "flagged": 946
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8147013782542113,
+            "recall": 0.40364188163884673,
+            "f1": 0.5398274987316083,
+            "flagged": 653
+          },
+          "fit_seconds": 2.34
+        },
+        {
+          "detector": "Autoencoder (all 7 features)",
+          "roc_auc_test": 0.7328102038883727,
+          "at_deployed_alert_rate": {
+            "precision": 0.44108761329305135,
+            "recall": 0.3323216995447648,
+            "f1": 0.37905668541756815,
+            "flagged": 993
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.3804692454026633,
+            "recall": 0.4552352048558422,
+            "f1": 0.41450777202072536,
+            "flagged": 1577
+          },
+          "fit_seconds": 3.5
+        }
+      ]
+    },
+    {
+      "seed": 7,
+      "train_blocks": 105000,
+      "test_blocks": 45000,
+      "test_anomalies": 1318,
+      "results": [
+        {
+          "detector": "Isolation Forest (V2 settings)",
+          "roc_auc_test": 0.9434797125646459,
+          "at_deployed_alert_rate": {
+            "precision": 0.7259507829977628,
+            "recall": 0.49241274658573597,
+            "f1": 0.5867992766726944,
+            "flagged": 894
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.926040061633282,
+            "recall": 0.4559939301972686,
+            "f1": 0.6110828673106253,
+            "flagged": 649
+          },
+          "fit_seconds": 1.15
+        },
+        {
+          "detector": "Autoencoder (V2's 3 features)",
+          "roc_auc_test": 0.8410434715819998,
+          "at_deployed_alert_rate": {
+            "precision": 0.6087408949011447,
+            "recall": 0.44385432473444614,
+            "f1": 0.5133830627468188,
+            "flagged": 961
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.6087408949011447,
+            "recall": 0.44385432473444614,
+            "f1": 0.5133830627468188,
+            "flagged": 961
+          },
+          "fit_seconds": 2.31
+        },
+        {
+          "detector": "Autoencoder (all 7 features)",
+          "roc_auc_test": 0.8286929160877773,
+          "at_deployed_alert_rate": {
+            "precision": 0.5432692307692307,
+            "recall": 0.4286798179059181,
+            "f1": 0.47921967769296014,
+            "flagged": 1040
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.5460717749757517,
+            "recall": 0.4271623672230653,
+            "f1": 0.47935291613452535,
+            "flagged": 1031
+          },
+          "fit_seconds": 3.37
+        }
+      ]
+    },
+    {
+      "seed": 123,
+      "train_blocks": 105000,
+      "test_blocks": 45000,
+      "test_anomalies": 1318,
+      "results": [
+        {
+          "detector": "Isolation Forest (V2 settings)",
+          "roc_auc_test": 0.9402806192971843,
+          "at_deployed_alert_rate": {
+            "precision": 0.7141304347826087,
+            "recall": 0.4984825493171472,
+            "f1": 0.5871313672922251,
+            "flagged": 920
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8936484490398818,
+            "recall": 0.4590288315629742,
+            "f1": 0.606516290726817,
+            "flagged": 677
+          },
+          "fit_seconds": 1.1
+        },
+        {
+          "detector": "Autoencoder (V2's 3 features)",
+          "roc_auc_test": 0.8454896798971793,
+          "at_deployed_alert_rate": {
+            "precision": 0.5207939508506616,
+            "recall": 0.4180576631259484,
+            "f1": 0.46380471380471383,
+            "flagged": 1058
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8872053872053872,
+            "recall": 0.3998482549317147,
+            "f1": 0.551255230125523,
+            "flagged": 594
+          },
+          "fit_seconds": 2.39
+        },
+        {
+          "detector": "Autoencoder (all 7 features)",
+          "roc_auc_test": 0.8299058136334895,
+          "at_deployed_alert_rate": {
+            "precision": 0.41529525653436594,
+            "recall": 0.3254931714719272,
+            "f1": 0.364951084644832,
+            "flagged": 1033
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.38071065989847713,
+            "recall": 0.5690440060698028,
+            "f1": 0.4562043795620438,
+            "flagged": 1970
+          },
+          "fit_seconds": 3.4
+        }
+      ]
+    },
+    {
+      "seed": 2024,
+      "train_blocks": 105000,
+      "test_blocks": 45000,
+      "test_anomalies": 1318,
+      "results": [
+        {
+          "detector": "Isolation Forest (V2 settings)",
+          "roc_auc_test": 0.9364591061943823,
+          "at_deployed_alert_rate": {
+            "precision": 0.6453900709219859,
+            "recall": 0.48330804248861914,
+            "f1": 0.5527114967462039,
+            "flagged": 987
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.8698224852071006,
+            "recall": 0.44613050075872535,
+            "f1": 0.5897693079237714,
+            "flagged": 676
+          },
+          "fit_seconds": 1.19
+        },
+        {
+          "detector": "Autoencoder (V2's 3 features)",
+          "roc_auc_test": 0.6391167778382304,
+          "at_deployed_alert_rate": {
+            "precision": 0.6619144602851323,
+            "recall": 0.2465857359635812,
+            "f1": 0.359314538419016,
+            "flagged": 491
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.6619144602851323,
+            "recall": 0.2465857359635812,
+            "f1": 0.359314538419016,
+            "flagged": 491
+          },
+          "fit_seconds": 2.28
+        },
+        {
+          "detector": "Autoencoder (all 7 features)",
+          "roc_auc_test": 0.7874734189065002,
+          "at_deployed_alert_rate": {
+            "precision": 0.4746666666666667,
+            "recall": 0.40515933232169954,
+            "f1": 0.43716741711011053,
+            "flagged": 1125
+          },
+          "at_train_best_f1_threshold": {
+            "precision": 0.4578111946532999,
+            "recall": 0.4157814871016692,
+            "f1": 0.4357852882703777,
+            "flagged": 1197
+          },
+          "fit_seconds": 3.45
+        }
+      ]
+    }
+  ]
+}

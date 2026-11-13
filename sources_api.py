@@ -51,14 +51,44 @@ MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # matches the 500MB the upload UI advertis
 
 # Connectors are declared here rather than in the dashboard so the "not
 # connected" set is a backend fact. Only manual upload is actually wired up.
+# Every connector says what it is: working, available to start, or future
+# work and why -- no button that silently does nothing.
+CLOUD_FUTURE = ("Future work: needs cloud credentials and a pull agent for that provider. "
+                "Export the logs and use File Upload, or forward them over Syslog.")
 CONNECTORS = [
-    {"name": "Manual File Upload", "icon": "Database", "enabled": True, "accent": "primary"},
-    {"name": "AWS CloudWatch", "icon": "Cloud", "enabled": False},
-    {"name": "Azure Monitor", "icon": "Server", "enabled": False},
-    {"name": "GCP Logging", "icon": "Waypoints", "enabled": False},
-    {"name": "Kafka Stream", "icon": "ListTree", "enabled": False},
-    {"name": "Syslog (RFC 5424)", "icon": "FileText", "enabled": False},
+    {"name": "Manual File Upload", "icon": "Database", "enabled": True, "accent": "primary", "status": "active",
+     "detail": "Upload a raw log of any of the five sources."},
+    {"name": "Kafka Stream", "icon": "ListTree", "enabled": True, "status": "idle",
+     "detail": "python3 -m streaming.processor --source <source>, then replay with streaming.producer."},
+    {"name": "Syslog (RFC 5424)", "icon": "FileText", "enabled": True, "status": "available",
+     "detail": "python3 -m streaming.syslog_receiver --source <source> --port 5514 forwards syslog into the stream."},
+    {"name": "AWS CloudWatch", "icon": "Cloud", "enabled": False, "status": "future", "detail": CLOUD_FUTURE},
+    {"name": "Azure Monitor", "icon": "Server", "enabled": False, "status": "future", "detail": CLOUD_FUTURE},
+    {"name": "GCP Logging", "icon": "Waypoints", "enabled": False, "status": "future", "detail": CLOUD_FUTURE},
 ]
+
+
+def _kafka_connector_status() -> dict:
+    """The newest stream processor run, as the Kafka connector's live state."""
+    from datetime import datetime, timezone
+
+    from db import stream_status
+
+    try:
+        latest = stream_status.find_one({}, sort=[("updated_at", -1)])
+    except PyMongoError:
+        return {"status": "unknown", "detail": "MongoDB unavailable; stream status unknown."}
+    if latest is None:
+        return {}
+    age = (datetime.now(timezone.utc) - datetime.fromisoformat(latest["updated_at"])).total_seconds()
+    live = age <= 10 and "stopped_at" not in latest
+    source = latest.get("source", "hdfs")
+    counts = latest.get("counts", {})
+    if live:
+        return {"status": "live", "detail": f"Processing {source}: {latest.get('events_per_sec', 0):,.0f} events/s, "
+                                            f"{latest.get('alerts', {}).get('total', 0):,} alerts so far."}
+    return {"status": "idle", "detail": f"Last run {latest['run_id']} ({source}) processed "
+                                        f"{counts.get('lines_received', 0):,} lines; no processor running now."}
 
 
 def _serialize(doc):
@@ -352,7 +382,13 @@ def _log_source_options():
 @sources_bp.get("/api/sources/connectors")
 @token_required
 def list_connectors():
-    return jsonify({"connectors": CONNECTORS, "log_sources": _log_source_options()})
+    connectors = []
+    for connector in CONNECTORS:
+        connector = dict(connector)
+        if connector["name"] == "Kafka Stream":
+            connector.update(_kafka_connector_status())
+        connectors.append(connector)
+    return jsonify({"connectors": connectors, "log_sources": _log_source_options()})
 
 
 @sources_bp.get("/api/sources/uploads/<upload_id>/detections")

@@ -584,7 +584,7 @@ class StorageApiTest(unittest.TestCase):
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
-        api._cache.update({"key": None, "tables": None})
+        api._caches.clear()
 
         app = Flask(__name__)
         app.register_blueprint(api.storage_bp)

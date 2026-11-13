@@ -1,5 +1,9 @@
 import os
 import re
+import sys
+
+if sys.version_info < (3, 11):
+    sys.exit(f"MorphGuard needs Python 3.11+ (scikit-learn 1.8.0 and the saved models); this is {sys.version.split()[0]}.")
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -20,6 +24,8 @@ from flask_cors import CORS
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.exceptions import HTTPException
 
+from account_api import account_bp
+from feedback_api import feedback_bp
 from db import user_details
 from early_warning_api import early_warning_bp
 from pipeline_api import pipeline_bp
@@ -51,6 +57,8 @@ app.register_blueprint(sources_bp)
 app.register_blueprint(storage_bp)
 app.register_blueprint(early_warning_bp)
 app.register_blueprint(stream_bp)
+app.register_blueprint(account_bp)
+app.register_blueprint(feedback_bp)
 
 user_details.create_index("email", unique=True)
 

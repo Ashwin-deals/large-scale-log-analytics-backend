@@ -26,6 +26,14 @@ class HDFSDataCleaner:
 
     schema = COMMON_LOG_SCHEMA
 
+    def __init__(self, drop_duplicates: bool = True):
+        # Exact-duplicate removal is right where a repeat is the same record
+        # delivered twice (HDFS, CloudTrail's repeated eventIDs), but wrong
+        # where identical lines are real repeats: Apache logs at 1-second
+        # resolution, so a burst of the same error collapses to one line and
+        # the burst disappears. Sources choose (multi_source.sources.SourceConfig.dedupe).
+        self.drop_duplicates = drop_duplicates
+
     def clean(
         self,
         logs: pd.DataFrame | str | Path,
@@ -35,10 +43,13 @@ class HDFSDataCleaner:
         self.validate_schema(frame)
 
         cleaned = frame.copy()
-        cleaned = cleaned.drop_duplicates()
+        if self.drop_duplicates:
+            cleaned = cleaned.drop_duplicates()
         cleaned = self._coerce_column_types(cleaned)
         cleaned = self._drop_invalid_required_rows(cleaned)
-        cleaned = cleaned.drop_duplicates().reset_index(drop=True)
+        if self.drop_duplicates:
+            cleaned = cleaned.drop_duplicates()
+        cleaned = cleaned.reset_index(drop=True)
 
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)

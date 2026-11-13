@@ -32,8 +32,17 @@ def _int_arg(name: str, default: int, low: int, high: int) -> int:
         return default
 
 
-def _latest_status(run_id: str | None):
-    query = {"_id": run_id} if run_id else {}
+def _source_query(source: str | None) -> dict:
+    """Runs from before per-source streaming carry no source field; they are HDFS."""
+    if not source:
+        return {}
+    if source == "hdfs":
+        return {"$or": [{"source": "hdfs"}, {"source": {"$exists": False}}]}
+    return {"source": source}
+
+
+def _latest_status(run_id: str | None, source: str | None = None):
+    query = {"_id": run_id} if run_id else _source_query(source)
     return stream_status.find_one(query, sort=[("updated_at", DESCENDING)])
 
 
@@ -41,7 +50,7 @@ def _latest_status(run_id: str | None):
 @token_required
 def get_status():
     try:
-        status = _latest_status(request.args.get("run_id"))
+        status = _latest_status(request.args.get("run_id"), request.args.get("source"))
     except PyMongoError as exc:
         return jsonify({"error": f"MongoDB unavailable: {exc.__class__.__name__}"}), 503
     if status is None:
@@ -71,7 +80,7 @@ def get_alerts():
     try:
         run_id = request.args.get("run_id")
         if not run_id:
-            latest = _latest_status(None)
+            latest = _latest_status(None, request.args.get("source"))
             run_id = latest["run_id"] if latest else None
         query = {"run_id": run_id} if run_id else {}
         if alert_type:

@@ -81,7 +81,8 @@ catches slightly fewer anomalies.
 |---|---|---|
 | 8 Sep, 23:45 to 00:49 | The review file (`review_dataset_full_columns.log`) was uploaded 8 times | `data/uploads/` timestamps |
 | 9 Sep, 00:57 | V3 promoted by `evaluate_and_promote()`: candidate F1 0.5622 beat V2's 0.5288 | `version_history.json`, 19:27:49 UTC |
-| 9 Sep, 08:14 and 10:07 | Uploads scored by V3. The review file gave 108 anomalies instead of the 120 documented for the review | The team's upload records (not in the repo) |
+| 9 Sep, 10:07 | The same review file, now scored by V3: 108 anomalies instead of the 120 documented for the review | Upload result files on Ashwin's Mac |
+| 9 Sep, from 10:13 | Review file uploads back at 120 anomalies (V2) | Upload result files on Ashwin's Mac |
 | 9 Sep, 10:10 | Rolled back to V2 by editing `current_version.json` by hand (note: "Manually rolled back from V3 to V2.") | `current_version.json`, `promoted_at` 04:40:48 UTC |
 | 25 Oct, 10:27 | Rollback committed, just before the GCP deployment | commit `28e14ea` |
 
@@ -94,6 +95,13 @@ now logs any future rollback automatically.
 ### Reason
 
 **Not recorded at the time. Awaiting confirmation from the team.**
+
+On the review file, V3 was the better model, according to the upload result files on Ashwin's Mac:
+
+| Model | Flagged | Real anomalies caught | False alarms | F1 on the review file |
+|---|---:|---:|---:|---:|
+| V2 | 120 | 75 | 45 | 0.5639 |
+| V3 | 108 | 76 | 32 | 0.5984 |
 
 The rollback was a human override of promote-if-better, not a decision
 based on metrics: V3 scored higher in-sample. The timing above is

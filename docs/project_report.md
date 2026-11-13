@@ -48,10 +48,14 @@ The system comprises five core subsystems:
 ## 3. Machine Learning & Evolutionary Optimization
 
 ### 3.1 Feature Representation
-Logs are aggregated per unique `block_id` to form feature vectors spanning:
-- Event code frequencies (e.g., `E1` through `E29`)
-- Operational sequence indicators (block allocations, terminations)
-- Lifecycle duration and message count ratios
+Logs are grouped by `block_id` (for HDFS, one storage block). Each block has 8 numeric features (`feature_engineering/feature_extractor.py`):
+- `hour_of_day`: hour of the block's first event
+- `is_error`: 1 if any line is ERROR. It is always 0 in HDFS, which has no ERROR lines.
+- `component_encoded`, `event_type_encoded`, `source_ip_encoded`, `destination_ip_encoded`: the block's most frequent value of each, as a stable category code
+- `block_size`: largest size seen
+- `event_frequency`: number of log lines
+
+Category codes come from a persisted vocabulary and are never renumbered. Every model is stamped with it, and scoring refuses to run if codes have changed. The GA chooses which of the 7 training features a model uses; V2 uses `component`, `event_frequency` and `destination_ip`. Features are not scaled: Isolation Forest splits on raw values. The Autoencoder comparison (§12) standardizes its inputs.
 
 ### 3.2 Detection Model: Isolation Forest
 Unsupervised tree ensembles isolate anomalies based on path lengths:
@@ -236,6 +240,15 @@ That is 1,745,197 of 5,587,093 lines kept. Full (HOT-only) retention is 0.9356 a
 
 ## 8. Real-Time Streaming Layer (Apache Kafka)
 
+Every source streams: `producer.py` and `processor.py` take `--source`. Each source has its own topic, parser, models, vocabulary, storage policy and idle timeout. The timeout matches the block definition: Django users end only at end of stream, and Apache windows close after 120 s. A full Django replay matches batch exactly: 161 anomalous users and 0 late events. Syslog over UDP feeds any source's topic through `streaming/syslog_receiver.py`.
+
+- **Why a Python stream processor and not Apache Flink (decision D3).** The original diagram had a Kafka/Flink box. It is now "Kafka + Python stream processor", for three reasons:
+  1. The stream must score with the batch pipeline's own Python feature code and scikit-learn models. `tests/test_streaming.py` checks that streamed features equal batch features exactly. PyFlink would run that same Python inside a JVM cluster and add nothing to the result.
+  2. One consumer process handled the 1,000,000-line verification replay on a laptop, and the demo VM has 8 GB.
+  3. Kafka's keyed partitions already give per-block ordering, which is the property the per-block state needs.
+
+  What Flink would add is checkpointed, exactly-once state that survives restarts. That is listed as future work.
+
 - **Broker:** `docker-compose.yml` runs a single Kafka broker in KRaft mode (`apache/kafka`) with the topics `logs.raw`, `alerts` and `storage.decisions`.
 - **Producer:** `streaming/producer.py` replays HDFS log lines at a configurable `--rate` and `--limit`, keyed by block id.
 - **Processor:** `streaming/processor.py` (confluent-kafka) parses every line with `parser/hdfs_parser.py` and keeps per-block running state. Its features are tested to equal the batch builders exactly.
@@ -314,22 +327,44 @@ MorphGuard adheres to defense-in-depth principles:
 
 ## 11. API Reference Summary
 
-Key endpoints provided by the Flask application:
-- `POST /api/v1/auth/login`: Issue bearer token.
-- `POST /api/v1/ingest`: Stream new log entries into feature store.
-- `POST /api/v1/detect`: Run real-time inference on feature vectors.
-- `POST /api/v1/optimize/run`: Trigger asynchronous GA generation cycle.
-- `GET /api/v1/models/history`: Fetch version lineage and evaluation metrics.
+All routes are under `/api/`, and every data route takes `?source=hdfs|openstack|apache|cloudtrail|django`. `docs/api_reference.md` has the full list.
+
+| Area | Routes |
+|---|---|
+| Auth | `POST /api/auth/register`, `/login`, `/change-password`; `GET /api/auth/me`, `/api/health` |
+| Detection | `GET /api/dashboard`, `/detections`, `/detections/summary`, `/detections/export`, `/analytics` |
+| Models | `GET /api/models`, `POST /api/models/retrain`, `GET /api/models/retrain/<job_id>` |
+| Feedback | `POST`, `GET` and `DELETE /api/feedback` |
+| Smart Storage | `GET /api/storage/summary`, `/policy`; `POST /api/storage/simulate` |
+| Early warning | `GET /api/early-warning/summary` |
+| Uploads | `POST /api/sources/upload`, `GET /api/sources/uploads`, `/uploads/<id>/detections`, `/connectors` |
+| Stream | `GET /api/stream/status`, `/api/stream/alerts` |
 
 ---
 
 ## 12. Future Directions
 
-Planned enhancements include:
-1. **Streaming Pipeline**: Apache Kafka integration is now implemented (§8). Remaining work: durable per-block state across restarts, and an explicit block-completion signal in place of the idle timeout.
-2. **Deep Learning Detectors**: Autoencoder and Graph Neural Network (GNN) modules.
-3. **Multi-Tenant Isolation**: Namespace partitioning for enterprise cloud tenants.
-4. **Automated Rollback**: Canary verification with automatic model rollback.
+### 12.1 Extra detector: Autoencoder vs Isolation Forest (done)
+
+`scripts/compare_autoencoder.py` runs both detectors unsupervised on the same five stratified 70/30 HDFS splits (`data/evaluation/autoencoder_comparison.json`). The Autoencoder standardizes its features first. Both are scored at the deployed model's alert rate. The data is the 150,000-block sample.
+
+| Detector | Test F1 | ROC AUC | Fit time |
+|---|---|---|---|
+| **Isolation Forest (V2 settings)** | **0.575 ± 0.013** | **0.941** | 1.1 s |
+| Autoencoder, V2's 3 features | 0.509 ± 0.100 | 0.750 | 2.4 s |
+| Autoencoder, all 7 features | 0.400 ± 0.051 | 0.800 | 3.4 s |
+
+Isolation Forest is more accurate, much more stable across splits, and faster. That is why it stays the detector.
+
+### 12.2 Analyst feedback loop (done)
+
+Analysts mark detections as real or false alarms (`/api/feedback`, Detection Results page). The next retrain of that source overrides the labels with these verdicts. It does this before drawing the GA's fitness sample and before scoring the candidate, and it re-scores the incumbent on the same corrected rows. `tests/test_feedback.py` proves that a marked alert changes the next retrain's fitness data.
+
+### 12.3 Still open
+
+1. **Streaming:** per-block state does not survive a restart. HDFS also has no "block finished" event, and the 1-hour idle timeout closes most blocks too early (§8).
+2. **Multi-tenant isolation:** namespaces per cloud tenant.
+3. **Cloud connectors:** CloudWatch, Azure Monitor and GCP Logging need provider credentials and pull agents. Syslog and Kafka work today.
 
 ---
 

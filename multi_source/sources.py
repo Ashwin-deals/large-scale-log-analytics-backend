@@ -25,6 +25,9 @@ class SourceConfig:
     block_description: str
     protocol: str = "holdout"  # or "in_sample" when there are too few anomalies to hold any out
     chunked_by_time: bool = False  # stream + clean/extract in time-ordered chunks (blocks never straddle a chunk)
+    # Drop exact-duplicate lines in cleaning? True where a repeat is the same
+    # record twice (CloudTrail eventIDs); False where repeats are real events.
+    dedupe: bool = True
     warnings: list[str] = field(default_factory=list)
     prepare_hint: str = ""
 
@@ -73,6 +76,10 @@ SOURCES = {
             "flagging those counts as a false positive here.",
         ],
         prepare_hint="python3 scripts/inject_apache_anomalies.py",
+        # Apache timestamps have 1-second resolution, so identical lines are
+        # real repeats (bursts), not duplicate deliveries: the shared cleaner
+        # used to drop 23,691 of them (37.9%).
+        dedupe=False,
     ),
     "cloudtrail": SourceConfig(
         name="cloudtrail",

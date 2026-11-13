@@ -59,16 +59,26 @@ def read_lines(path: Path, limit: int | None):
 def main(argv=None):
     from confluent_kafka import Producer
 
-    parser = argparse.ArgumentParser(description="Replay HDFS log lines into Kafka.")
-    parser.add_argument("--log", type=Path, default=DEFAULT_LOG)
+    from streaming.sources import STREAM_SOURCES, iter_messages, line_parser, message_key, topic_for
+
+    parser = argparse.ArgumentParser(description="Replay a source's raw log lines into Kafka.")
+    parser.add_argument("--source", default="hdfs", choices=STREAM_SOURCES,
+                        help="which log source to replay (default hdfs); each has its own topic")
+    parser.add_argument("--log", type=Path, default=None, help="replay this file instead of the source's raw inputs")
     parser.add_argument("--rate", type=float, default=1000.0, help="events per second (0 = unthrottled)")
     parser.add_argument("--limit", type=int, default=None, help="stop after N lines")
     parser.add_argument("--bootstrap", default=BOOTSTRAP_SERVERS)
-    parser.add_argument("--topic", default=TOPIC_LOGS_RAW)
+    parser.add_argument("--topic", default=None, help="override the source's topic")
     args = parser.parse_args(argv)
-
-    if not args.log.exists():
-        sys.exit(f"{args.log} not found. Fetch it with: python3 scripts/download_dataset.py")
+    args.topic = args.topic or topic_for(args.source)
+    if args.source == "hdfs" and args.log is None:
+        args.log = DEFAULT_LOG
+    try:
+        messages = iter_messages(args.source, args.limit, args.log)
+        first = next(messages, None)
+    except FileNotFoundError as exc:
+        sys.exit(str(exc))
+    keyer = line_parser(args.source)
 
     failed = {"n": 0}
 
@@ -79,12 +89,15 @@ def main(argv=None):
     producer = Producer({"bootstrap.servers": args.bootstrap, "linger.ms": 20, "batch.num.messages": 10000})
     limiter = RateLimiter(args.rate)
     sent = 0
-    print(f"[producer] {args.log} -> {args.topic} at {'max' if args.rate <= 0 else f'{args.rate:,.0f}/s'}"
+    print(f"[producer] {args.source}: {args.log or 'raw inputs'} -> {args.topic} at {'max' if args.rate <= 0 else f'{args.rate:,.0f}/s'}"
           f"{f', limit {args.limit:,}' if args.limit else ''}", flush=True)
-    for line in read_lines(args.log, args.limit):
+    import itertools
+
+    for line in itertools.chain([first] if first is not None else [], messages):
+        key = block_key(line) if args.source == "hdfs" else message_key(keyer, line)
         while True:
             try:
-                producer.produce(args.topic, key=block_key(line), value=line.encode("utf-8"), on_delivery=on_delivery)
+                producer.produce(args.topic, key=key, value=line.encode("utf-8"), on_delivery=on_delivery)
                 break
             except BufferError:  # local queue full: let it drain
                 producer.poll(0.1)

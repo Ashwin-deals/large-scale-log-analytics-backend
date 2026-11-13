@@ -84,13 +84,13 @@ The server starts on `http://localhost:5000`.
 
 ## Full Pipeline Setup
 
-### Step 1: Explore the Raw Data
+### Step 1: Check the Raw Data
 
 ```bash
-python3 scripts/exlpore_hdfs.py
+python3 scripts/verify_features_labels.py
 ```
 
-This script provides an overview of the raw HDFS log data including line counts, format samples, and basic statistics.
+This checks that the feature file and the HDFS labels join cleanly (no lost or duplicate block ids).
 
 ### Step 2: Build Block Metadata
 

@@ -21,8 +21,11 @@ from detection.predict import predict
 from detection.train import DEFAULT_FEATURES_PATH, load_labeled_features
 from optimization.ga_isolation_forest import TRAINING_FEATURE_COLUMNS, build_model, run_ga, stratified_subsample
 from optimization.model_evolution import DEFAULT_CURRENT_VERSION_PATH, DEFAULT_VERSION_HISTORY_PATH, evaluate_and_promote
+from feature_engineering.block_metadata import build_block_metadata
+from source_context import SourceContext, get_context, load_labeled, register_error_handlers, request_context
 
 pipeline_bp = Blueprint("pipeline", __name__)
+register_error_handlers(pipeline_bp)
 
 MODELS_DIR = Path("data/models")
 EVALUATION_DIR = Path("data/evaluation")
@@ -75,14 +78,15 @@ def _clean_float(value):
 # Model / version helpers
 # ---------------------------------------------------------------------------
 
-def resolve_current_deployment():
-    if not DEFAULT_CURRENT_VERSION_PATH.exists():
+def resolve_current_deployment(ctx: SourceContext | None = None):
+    ctx = ctx or get_context("hdfs")
+    if not ctx.current_version_path.exists():
         return {
             "version": 1,
-            "model_path": str(DEFAULT_CURRENT_MODEL_PATH),
-            "metrics_path": str(DEFAULT_CURRENT_METRICS_PATH),
+            "model_path": str(ctx.baseline_model_path),
+            "metrics_path": str(ctx.baseline_metrics_path),
         }
-    current = _read_json(DEFAULT_CURRENT_VERSION_PATH)
+    current = _read_json(ctx.current_version_path)
     return current
 
 
@@ -95,15 +99,27 @@ def _metrics_for(metrics_path: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 _cache_lock = threading.Lock()
-_cache = {
-    "version": None,
-    "data_key": None,  # mtimes of the files the predictions were built from
-    "predictions": None,  # DataFrame: block_id, true_label, predicted_label, anomaly_score, severity
-    "block_metadata": None,  # DataFrame
-    "block_metadata_mtime": None,
-    "dataset_stats": None,
-    "dataset_stats_mtime": None,
-}
+
+
+def _new_cache() -> dict:
+    return {
+        "version": None,
+        "data_key": None,
+        "predictions": None,
+        "block_metadata": None,
+        "block_metadata_mtime": None,
+        "dataset_stats": None,
+        "dataset_stats_mtime": None,
+    }
+
+
+# One cache per source; "hdfs" is also reachable as _cache for older callers.
+_caches: dict[str, dict] = {"hdfs": _new_cache()}
+_cache = _caches["hdfs"]
+
+
+def _cache_for(ctx: SourceContext) -> dict:
+    return _caches.setdefault(ctx.name, _new_cache())
 
 
 def _mtime(path: Path):
@@ -114,26 +130,54 @@ def _mtime(path: Path):
         return None
 
 
-def _load_block_metadata() -> pd.DataFrame:
+def _ensure_block_metadata(ctx: SourceContext) -> None:
+    """Non-HDFS sources: build block_metadata.csv / dataset_stats.json from the
+    source's cleaned.csv the first time they are asked for (sources run
+    through an older pipeline have the cleaned log but not these files)."""
+    if ctx.is_hdfs or (ctx.block_metadata_path.exists() and ctx.dataset_stats_path.exists()):
+        return
+    if ctx.cleaned_path.exists():
+        build_block_metadata(ctx.cleaned_path, ctx.block_metadata_path, ctx.dataset_stats_path)
+
+
+def _block_metadata_path(ctx: SourceContext | None) -> Path:
+    return BLOCK_METADATA_PATH if ctx is None or ctx.is_hdfs else ctx.block_metadata_path
+
+
+def _dataset_stats_path(ctx: SourceContext | None) -> Path:
+    return DATASET_STATS_PATH if ctx is None or ctx.is_hdfs else ctx.dataset_stats_path
+
+
+def _load_block_metadata(ctx: SourceContext | None = None) -> pd.DataFrame:
     # Keyed on mtime: the pipeline scripts rewrite these files, and caching on
     # first read alone served stale numbers until the server was restarted.
-    mtime = _mtime(BLOCK_METADATA_PATH)
-    if _cache["block_metadata"] is None or _cache["block_metadata_mtime"] != mtime:
-        frame = pd.read_csv(BLOCK_METADATA_PATH)
+    cache = _cache_for(ctx) if ctx else _cache
+    if ctx is not None:
+        _ensure_block_metadata(ctx)
+    path = _block_metadata_path(ctx)
+    if ctx is not None:
+        ctx.require(path)
+    mtime = _mtime(path)
+    if cache["block_metadata"] is None or cache["block_metadata_mtime"] != mtime:
+        frame = pd.read_csv(path)
         frame["first_seen"] = pd.to_datetime(frame["first_seen"])
-        _cache["block_metadata"] = frame
-        _cache["block_metadata_mtime"] = mtime
-    return _cache["block_metadata"]
+        cache["block_metadata"] = frame
+        cache["block_metadata_mtime"] = mtime
+    return cache["block_metadata"]
 
 
-def _load_dataset_stats() -> dict:
-    mtime = _mtime(DATASET_STATS_PATH)
-    if _cache["dataset_stats"] is None or _cache["dataset_stats_mtime"] != mtime:
+def _load_dataset_stats(ctx: SourceContext | None = None) -> dict:
+    cache = _cache_for(ctx) if ctx else _cache
+    if ctx is not None:
+        _ensure_block_metadata(ctx)
+    path = _dataset_stats_path(ctx)
+    mtime = _mtime(path)
+    if cache["dataset_stats"] is None or cache["dataset_stats_mtime"] != mtime:
         # A missing file caches as {}, so without the mtime check the API kept
         # reporting zero logs processed after the stats were generated.
-        _cache["dataset_stats"] = _read_json(DATASET_STATS_PATH) or {}
-        _cache["dataset_stats_mtime"] = mtime
-    return _cache["dataset_stats"]
+        cache["dataset_stats"] = _read_json(path) or {}
+        cache["dataset_stats_mtime"] = mtime
+    return cache["dataset_stats"]
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +282,7 @@ def _compute_severity(scores: pd.Series, is_anomaly: pd.Series) -> pd.Series:
     return severity
 
 
-def get_current_predictions() -> pd.DataFrame:
+def get_current_predictions(ctx: SourceContext | None = None) -> pd.DataFrame:
     """
     Returns block-level predictions (block_id, true_label, predicted_label,
     anomaly_score, severity, first_seen, component, event_type, source_ip,
@@ -246,23 +290,34 @@ def get_current_predictions() -> pd.DataFrame:
     Cached in memory; recomputed only when current_version.json's version
     changes (i.e. after a promotion).
     """
-    current = resolve_current_deployment()
+    ctx = ctx or get_context("hdfs")
+    cache = _cache_for(ctx)
+    current = resolve_current_deployment(ctx)
     version = current.get("version")
+    if not ctx.is_hdfs:
+        ctx.require(ctx.features_path, ctx.labels_path, Path(current["model_path"]))
     # Rebuilding features.csv or block_metadata.csv changes the predictions
     # even when the deployed version hasn't moved, so both count towards the
     # cache key alongside the version — as does any newly processed upload.
-    data_key = (_mtime(DEFAULT_FEATURES_PATH), _mtime(BLOCK_METADATA_PATH), _upload_blocks_key())
+    upload_key = _upload_blocks_key() if ctx.is_hdfs else ()
+    data_key = (_mtime(ctx.features_path), _mtime(_block_metadata_path(ctx)), upload_key)
 
     with _cache_lock:
-        if _cache["version"] == version and _cache["data_key"] == data_key and _cache["predictions"] is not None:
-            return _cache["predictions"]
+        if cache["version"] == version and cache["data_key"] == data_key and cache["predictions"] is not None:
+            return cache["predictions"]
 
         model = joblib.load(current["model_path"])
-        merged = load_labeled_features()
+        if ctx.is_hdfs:
+            merged = load_labeled_features()
+            vocab_kwargs = {}
+        else:
+            merged = load_labeled(ctx)
+            vocab_kwargs = {"vocab_path": ctx.vocab_path}
         feature_columns = list(model.feature_names_in_)
-        predictions = predict(model, merged, output_path=CANDIDATE_PREDICTIONS_PATH.parent / "_live_predictions.csv", feature_columns=feature_columns)
+        predictions = predict(model, merged, output_path=CANDIDATE_PREDICTIONS_PATH.parent / f"_live_predictions_{ctx.name}.csv",
+                              feature_columns=feature_columns, **vocab_kwargs)
 
-        block_metadata = _load_block_metadata()
+        block_metadata = _load_block_metadata(ctx)
         joined = predictions.merge(block_metadata, on="block_id", how="left")
         joined["source"] = "dataset"
         joined["event_frequency"] = pd.NA
@@ -270,7 +325,9 @@ def get_current_predictions() -> pd.DataFrame:
         # Uploaded blocks the base dataset has never seen extend the totals;
         # ones it already contains are dropped rather than counted twice (the
         # same block scored by the same model gives the same answer either way).
-        uploaded = _load_upload_blocks()
+        # Uploads are folded into the HDFS dataset only (other sources' blocks
+        # -- sessions, windows, users -- have no dataset-wide identity).
+        uploaded = _load_upload_blocks() if ctx.is_hdfs else pd.DataFrame()
         if len(uploaded):
             new_blocks = uploaded[~uploaded["block_id"].isin(set(joined["block_id"]))].copy()
             if len(new_blocks):
@@ -283,23 +340,25 @@ def get_current_predictions() -> pd.DataFrame:
         is_anomaly = joined["predicted_label"] == "Anomaly"
         joined["severity"] = _compute_severity(joined["anomaly_score"], is_anomaly)
 
-        _cache["version"] = version
-        _cache["data_key"] = data_key
-        _cache["predictions"] = joined
+        cache["version"] = version
+        cache["data_key"] = data_key
+        cache["predictions"] = joined
         return joined
 
 
-def invalidate_prediction_cache():
+def invalidate_prediction_cache(ctx: SourceContext | None = None):
     with _cache_lock:
-        _cache["version"] = None
-        _cache["predictions"] = None
+        for name, cache in _caches.items():
+            if ctx is None or name == ctx.name:
+                cache["version"] = None
+                cache["predictions"] = None
 
 
 # ---------------------------------------------------------------------------
 # GET /api/dashboard
 # ---------------------------------------------------------------------------
 
-def latest_upload_view(email: str) -> dict | None:
+def latest_upload_view(email: str, source: str = "hdfs") -> dict | None:
     """The signed-in user's most recent processed upload that this machine
     actually holds results for.
 
@@ -311,6 +370,8 @@ def latest_upload_view(email: str) -> dict | None:
         return None
     try:
         for doc in uploads.find({"uploaded_by": email, "status": "processed"}).sort("uploaded_at", -1).limit(10):
+            if (doc.get("log_source") or "hdfs") != source:
+                continue
             blocks_path = UPLOAD_BLOCKS_DIR / f"{doc['_id']}_blocks.csv"
             if blocks_path.exists() and upload_store.results_path(doc["_id"], UPLOAD_BLOCKS_DIR).exists():
                 return {"id": str(doc["_id"]), "name": doc.get("name"),
@@ -324,14 +385,15 @@ def latest_upload_view(email: str) -> dict | None:
 @pipeline_bp.get("/api/dashboard")
 @token_required
 def dashboard():
-    stats = _load_dataset_stats()
-    current = resolve_current_deployment()
+    ctx = request_context()
+    stats = _load_dataset_stats(ctx)
+    current = resolve_current_deployment(ctx)
     current_metrics = _metrics_for(current["metrics_path"]) or {}
 
     # Once a log file has been uploaded the dashboard reports on *that file*;
     # ?scope=dataset switches back to the full deployed dataset.
     scope = (request.args.get("scope") or "auto").strip().lower()
-    upload_view = None if scope == "dataset" else latest_upload_view((g.user or {}).get("email"))
+    upload_view = None if scope == "dataset" else latest_upload_view((g.user or {}).get("email"), ctx.name)
 
     if upload_view is not None:
         predictions = pd.read_csv(upload_view["blocks_path"])
@@ -350,7 +412,7 @@ def dashboard():
         }
         from_uploads = pd.Series(True, index=predictions.index)
     else:
-        predictions = get_current_predictions()
+        predictions = get_current_predictions(ctx)
         from_uploads = predictions["source"] == "upload"
 
     # Uploads contribute their own raw log lines on top of the base dataset's,
@@ -415,13 +477,10 @@ def dashboard():
         if severity_counts.get(name, 0) > 0
     ]
 
-    history = _read_json(DEFAULT_VERSION_HISTORY_PATH) or []
+    history = _read_json(ctx.version_history_path) or []
     model_evolution = []
     for version in range(1, current["version"] + 1):
-        if version == 1:
-            metrics = _read_json(DEFAULT_CURRENT_METRICS_PATH)
-        else:
-            metrics = _read_json(EVALUATION_DIR / f"isolation_forest_v{version}_metrics.json")
+        metrics = _read_json(ctx.version_metrics_path(version))
         model_evolution.append(
             {
                 "version": f"V{version}",
@@ -498,8 +557,14 @@ def dashboard():
             "model_evolution": model_evolution,
             "recent_activity": activity[:8],
             "date_range": stats.get("date_range"),
+            "source": _source_info(ctx),
         }
     )
+
+
+def _source_info(ctx: SourceContext) -> dict:
+    """What every ?source= response says about the data it describes."""
+    return {"name": ctx.name, "title": ctx.title, "label_kind": ctx.label_kind, "block_noun": ctx.block_noun}
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +574,9 @@ def dashboard():
 @pipeline_bp.get("/api/detections/summary")
 @token_required
 def detections_summary():
-    predictions = get_current_predictions()
-    current = resolve_current_deployment()
+    ctx = request_context()
+    predictions = get_current_predictions(ctx)
+    current = resolve_current_deployment(ctx)
     model = joblib.load(current["model_path"])
 
     total = len(predictions)
@@ -524,32 +590,34 @@ def detections_summary():
             "normal_count": normal,
             "anomalous_count": anomalous,
             "avg_anomaly_score": avg_score,
-            "contamination_threshold": _clean_float(model.contamination),
+            "contamination_threshold": _clean_float(model.contamination) if isinstance(model.contamination, (int, float)) else None,
+            "source": _source_info(ctx),
         }
     )
+
+
+def _filter_detections(predictions: pd.DataFrame) -> pd.DataFrame:
+    """?severity= and ?search= as the Detection Results page applies them."""
+    search = (request.args.get("search") or "").strip().lower()
+    severity = (request.args.get("severity") or "all").strip().lower()
+    filtered = predictions
+    if severity != "all":
+        filtered = filtered[filtered["severity"] == severity]
+    if search:
+        text = lambda col: filtered[col].astype("string").str.lower().str.contains(search, na=False, regex=False)
+        filtered = filtered[text("block_id") | text("component") | text("event_type") | text("source_ip")]
+    return filtered
 
 
 @pipeline_bp.get("/api/detections")
 @token_required
 def detections():
-    predictions = get_current_predictions()
+    ctx = request_context()
+    predictions = get_current_predictions(ctx)
 
-    search = (request.args.get("search") or "").strip().lower()
-    severity = (request.args.get("severity") or "all").strip().lower()
     page = max(1, _int_arg("page", 1))
     limit = min(200, max(1, _int_arg("limit", 25)))
-
-    filtered = predictions
-    if severity != "all":
-        filtered = filtered[filtered["severity"] == severity]
-    if search:
-        mask = (
-            filtered["block_id"].str.lower().str.contains(search, na=False)
-            | filtered["component"].str.lower().str.contains(search, na=False)
-            | filtered["event_type"].str.lower().str.contains(search, na=False)
-            | filtered["source_ip"].str.lower().str.contains(search, na=False)
-        )
-        filtered = filtered[mask]
+    filtered = _filter_detections(predictions)
 
     filtered = filtered.sort_values("anomaly_score", ascending=False)
     total = len(filtered)
@@ -575,7 +643,22 @@ def detections():
         for row in page_rows.itertuples()
     ]
 
-    return jsonify({"items": items, "total": total, "page": page, "limit": limit})
+    return jsonify({"items": items, "total": total, "page": page, "limit": limit, "source": _source_info(ctx)})
+
+
+@pipeline_bp.get("/api/detections/export")
+@token_required
+def detections_export():
+    """Every row the Detection Results page would list for these filters, as CSV."""
+    from flask import Response
+
+    ctx = request_context()
+    filtered = _filter_detections(get_current_predictions(ctx))
+    columns = ["block_id", "first_seen", "component", "event_type", "source_ip", "destination_ip",
+               "anomaly_score", "severity", "predicted_label", "true_label", "source"]
+    csv_text = filtered.sort_values("anomaly_score", ascending=False)[columns].to_csv(index=False)
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": f'attachment; filename="{ctx.name}_detections.csv"'})
 
 
 # ---------------------------------------------------------------------------
@@ -585,8 +668,9 @@ def detections():
 @pipeline_bp.get("/api/analytics")
 @token_required
 def analytics():
-    stats = _load_dataset_stats()
-    predictions = get_current_predictions()
+    ctx = request_context()
+    stats = _load_dataset_stats(ctx)
+    predictions = get_current_predictions(ctx)
 
     def top_n(distribution: dict, n: int) -> list[dict]:
         ordered = sorted(distribution.items(), key=lambda kv: kv[1], reverse=True)
@@ -599,7 +683,7 @@ def analytics():
         for name, count in stats.get("log_level_distribution", {}).items()
     ]
 
-    features_path = Path("data/features/features.csv")
+    features_path = ctx.features_path
     hour_counts = (
         pd.read_csv(features_path, usecols=["hour_of_day"])["hour_of_day"]
         .value_counts()
@@ -643,6 +727,7 @@ def analytics():
             "anomalies_by_component_by_day": anomalies_by_component_by_day,
             "top_components": top_components,
             "date_range": stats.get("date_range"),
+            "source": _source_info(ctx),
         }
     )
 
@@ -710,10 +795,18 @@ def _timeline_from_history(history: list[dict]) -> list[dict]:
 @pipeline_bp.get("/api/models")
 @token_required
 def models():
-    current = resolve_current_deployment()
+    ctx = request_context()
+    current = resolve_current_deployment(ctx)
+    if not ctx.is_hdfs:
+        ctx.require(Path(current["model_path"]))
     current_metrics = _metrics_for(current["metrics_path"])
-    history = _read_json(DEFAULT_VERSION_HISTORY_PATH) or []
-    ga_best_config = _read_json(GA_BEST_CONFIG_PATH)
+    history = _read_json(ctx.version_history_path) or []
+    report = ctx.source_report()
+    if ctx.is_hdfs:
+        ga_best_config = _read_json(GA_BEST_CONFIG_PATH)
+    else:
+        candidate = (report or {}).get("models", {}).get("ga_candidate", {})
+        ga_best_config = {"chromosome": candidate.get("chromosome"), "best_fitness": candidate.get("ga_best_fitness")} if candidate else None
 
     # Every version ever issued, not just up to the live one: after a rollback
     # (V3 -> V2) the newer version still exists and should show as rolled back.
@@ -721,8 +814,7 @@ def models():
     rolled_back = {int(e["from_version"]) for e in history if e.get("event") == "rollback"}
     version_rows = []
     for version in range(1, max(issued) + 1):
-        metrics_path = DEFAULT_CURRENT_METRICS_PATH if version == 1 else EVALUATION_DIR / f"isolation_forest_v{version}_metrics.json"
-        metrics = _read_json(metrics_path) or {}
+        metrics = _read_json(ctx.version_metrics_path(version)) or {}
         promoted_at = None
         for entry in history:
             if entry.get("new_version") == version:
@@ -754,9 +846,55 @@ def models():
             "history_table": version_rows,
             "timeline": _timeline_from_history(history),
             "ga_best_config": ga_best_config,
-            "job": job,
+            "job": job if job is None or job.get("source", "hdfs") == ctx.name else None,
+            "source": _source_info(ctx),
+            # Held-out numbers and label caveats from the source's own report.
+            "evaluation": _source_evaluation(ctx, report),
         }
     )
+
+
+def _source_evaluation(ctx: SourceContext, report: dict | None) -> dict | None:
+    """Per-source held-out test metrics, plus every caveat that limits what
+    they mean. OpenStack also gets the second label view: how many of the
+    dataset's 4 documented faulty instances the model catches."""
+    if report is None:
+        holdout = _read_json(EVALUATION_DIR / "holdout_comparison.json") if ctx.is_hdfs else None
+        if not holdout:
+            return None
+        deployed = holdout["versions"].get(f"V{holdout['deployed_version']}", {})
+        comparison = _read_json(EVALUATION_DIR / "autoencoder_comparison.json")
+        return {
+            # D1: the extra detector the architecture diagram calls for, on the same held-out splits.
+            "model_comparison": {
+                "protocol": comparison["protocol"],
+                "seeds": [run["seed"] for run in comparison["runs"]],
+                "rows": [{"detector": name, **{k: v["mean"] for k, v in row.items()},
+                          "f1_std": row["f1_at_deployed_alert_rate"]["std"]}
+                         for name, row in comparison["summary"].items()],
+            } if comparison else None,
+            "protocol": "held-out 30%, refit on 70% (scripts/evaluate_holdout.py)",
+            "test_blocks": holdout["split"]["test"]["blocks"],
+            "test_anomalies": holdout["split"]["test"]["anomalies"],
+            "deployed_test_f1": deployed.get("refit_test", {}).get("f1"),
+            "stability": holdout.get("stability_across_splits"),
+            "warnings": [] if holdout["data"]["blocks"] >= 575_061 else
+                        [f"Held-out numbers come from a {holdout['data']['blocks']:,}-block sample."],
+        }
+    models_section = report.get("models", {})
+    return {
+        "protocol": report.get("evaluation_protocol"),
+        "test_blocks": report.get("split", {}).get("test_blocks"),
+        "test_anomalies": report.get("split", {}).get("test_anomalies"),
+        "v1_test_f1": models_section.get("v1_baseline", {}).get("f1"),
+        "v1_caught": models_section.get("v1_baseline", {}).get("caught"),
+        "deployed_test_f1": models_section.get("ga_candidate", {}).get("f1"),
+        "deployed_caught": models_section.get("ga_candidate", {}).get("caught"),
+        "label_kind": report.get("label_kind"),
+        "label_description": report.get("label_description"),
+        "warnings": report.get("warnings", []),
+        "ground_truth_check": report.get("ground_truth_check"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -775,17 +913,27 @@ def _latest_job():
         return _jobs.get(_active_job_id)
 
 
-def _run_retrain_job(job_id: str):
+def _run_retrain_job(job_id: str, source: str = "hdfs"):
+    ctx = get_context(source)
     with _jobs_lock:
         _jobs[job_id]["state"] = "running"
         _jobs[job_id]["started_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
-        current = resolve_current_deployment()
+        current = resolve_current_deployment(ctx)
         current_model_path = current["model_path"]
         current_metrics_path = current["metrics_path"]
 
-        merged = load_labeled_features()
+        if ctx.is_hdfs:
+            merged = load_labeled_features()
+            vocab_kwargs = {}
+            candidate_model_path, candidate_metrics_path = CANDIDATE_MODEL_PATH, CANDIDATE_METRICS_PATH
+            predictions_path = CANDIDATE_PREDICTIONS_PATH
+        else:
+            merged = load_labeled(ctx)
+            vocab_kwargs = {"vocab_path": ctx.vocab_path}
+            candidate_model_path, candidate_metrics_path = ctx.candidate_model_path, ctx.candidate_metrics_path
+            predictions_path = CANDIDATE_PREDICTIONS_PATH.parent / f"{ctx.name}_candidate_predictions.csv"
         fitness_sample_size = min(FITNESS_SAMPLE_SIZE, len(merged))
 
         # A fresh seed per run. Pinned to the module default, the GA and the
@@ -797,7 +945,32 @@ def _run_retrain_job(job_id: str):
         with _jobs_lock:
             _jobs[job_id]["random_seed"] = run_seed
 
-        fitness_data = stratified_subsample(merged, fitness_sample_size, random_state=run_seed)
+        # D2: analysts' verdicts override the labels before anything is
+        # sampled or scored, so the GA's fitness reflects confirmed alerts.
+        from feedback_api import apply_feedback, load_feedback
+
+        merged, feedback_stats = apply_feedback(merged, load_feedback(ctx.name))
+        with _jobs_lock:
+            _jobs[job_id]["feedback"] = feedback_stats
+
+        # Non-HDFS sources record V1/V2 F1 on a fixed held-out 30% split
+        # (multi_source/pipeline.py), so a candidate must be fitted on the same
+        # 70% and scored on the same 30% -- scoring it in-sample against a
+        # held-out incumbent would favour every candidate. HDFS models are all
+        # scored on every block, so its candidates are too.
+        if ctx.is_hdfs:
+            fit_rows, eval_rows = merged, merged
+        else:
+            from multi_source.pipeline import TEST_SIZE, split
+            from multi_source.sources import get_source
+
+            train_idx, test_idx = split(merged["Label"].to_numpy(), get_source(ctx.name).protocol, TEST_SIZE)
+            fit_rows, eval_rows = merged.iloc[train_idx], merged.iloc[test_idx]
+            fitness_sample_size = min(FITNESS_SAMPLE_SIZE, len(fit_rows))
+        with _jobs_lock:
+            _jobs[job_id]["evaluated_on"] = "every block (in-sample, as V1/V2)" if ctx.is_hdfs else f"held-out {len(eval_rows):,} blocks (same split as V1/V2)"
+
+        fitness_data = stratified_subsample(fit_rows, fitness_sample_size, random_state=run_seed)
 
         _, result = run_ga(
             X=fitness_data[TRAINING_FEATURE_COLUMNS],
@@ -811,26 +984,44 @@ def _run_retrain_job(job_id: str):
         best = result.best_chromosome
         selected_features = best.selected_features
         model = build_model(best, random_state=run_seed)
-        model.fit(merged[selected_features])
+        model.fit(fit_rows[selected_features])
 
-        CANDIDATE_MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        save_model(model, CANDIDATE_MODEL_PATH)
+        candidate_model_path.parent.mkdir(parents=True, exist_ok=True)
+        predictions_path.parent.mkdir(parents=True, exist_ok=True)
+        candidate_metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        save_model(model, candidate_model_path, **vocab_kwargs)
 
         candidate_predictions = predict(
-            model, merged, output_path=CANDIDATE_PREDICTIONS_PATH, feature_columns=selected_features
+            model, eval_rows, output_path=predictions_path, feature_columns=selected_features, **vocab_kwargs
         )
-        candidate_metrics = evaluate(candidate_predictions, metrics_path=CANDIDATE_METRICS_PATH)
+        candidate_metrics = evaluate(candidate_predictions, metrics_path=candidate_metrics_path)
         print_metrics_table(candidate_metrics)
+
+        if feedback_stats["applied"]:
+            # The incumbent's recorded F1 used the old labels; re-score it on
+            # the same corrected rows so promote-if-better stays fair.
+            incumbent = joblib.load(current_model_path)
+            incumbent_predictions = predict(
+                incumbent, eval_rows, output_path=predictions_path.with_name(f"_{ctx.name}_incumbent_feedback.csv"),
+                feature_columns=list(incumbent.feature_names_in_), **vocab_kwargs,
+            )
+            current_metrics_path = candidate_metrics_path.with_name("current_with_feedback_metrics.json")
+            evaluate(incumbent_predictions, metrics_path=current_metrics_path)
 
         decision = evaluate_and_promote(
             current_model_path=current_model_path,
-            candidate_model_path=CANDIDATE_MODEL_PATH,
+            candidate_model_path=candidate_model_path,
             current_metrics_path=current_metrics_path,
-            candidate_metrics_path=CANDIDATE_METRICS_PATH,
+            candidate_metrics_path=candidate_metrics_path,
             metric="f1",
+            models_dir=ctx.models_dir,
+            evaluation_dir=ctx.evaluation_dir,
+            archive_dir=ctx.archive_dir,
+            current_version_path=ctx.current_version_path,
+            version_history_path=ctx.version_history_path,
         )
 
-        invalidate_prediction_cache()
+        invalidate_prediction_cache(ctx)
 
         with _jobs_lock:
             _jobs[job_id]["state"] = "done"
@@ -847,17 +1038,20 @@ def _run_retrain_job(job_id: str):
 @token_required
 def start_retrain():
     global _active_job_id
+    ctx = request_context()
+    if not ctx.is_hdfs:
+        ctx.require(ctx.features_path, ctx.labels_path, ctx.vocab_path)
     with _jobs_lock:
         if _active_job_id is not None and _jobs[_active_job_id]["state"] == "running":
             return jsonify({"error": "A retrain job is already running.", "job_id": _active_job_id}), 409
 
         job_id = uuid.uuid4().hex
-        _jobs[job_id] = {"job_id": job_id, "state": "queued", "result": None, "error": None}
+        _jobs[job_id] = {"job_id": job_id, "state": "queued", "result": None, "error": None, "source": ctx.name}
         _active_job_id = job_id
 
-    thread = threading.Thread(target=_run_retrain_job, args=(job_id,), daemon=True)
+    thread = threading.Thread(target=_run_retrain_job, args=(job_id, ctx.name), daemon=True)
     thread.start()
-    return jsonify({"job_id": job_id}), 202
+    return jsonify({"job_id": job_id, "source": ctx.name}), 202
 
 
 @pipeline_bp.get("/api/models/retrain/<job_id>")

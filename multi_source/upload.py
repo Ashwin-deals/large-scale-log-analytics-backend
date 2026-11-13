@@ -50,7 +50,8 @@ def score_upload(source: str, recognized_frame: pd.DataFrame, upload_id, process
     processed_dir.mkdir(parents=True, exist_ok=True)
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    cleaned = HDFSDataCleaner().clean(recognized_frame, processed_dir / f"{upload_id}_cleaned.csv")
+    cleaned = HDFSDataCleaner(drop_duplicates=get_source(source).dedupe).clean(
+        recognized_frame, processed_dir / f"{upload_id}_cleaned.csv")
     features_path = processed_dir / f"{upload_id}_features.csv"
     # Same contract as an HDFS upload: unseen values are appended to this
     # source's vocabulary (never renumbered), so the model's codes stay valid.

@@ -94,11 +94,12 @@ class BlockState:
     __slots__ = (
         "block_id", "n", "t_min", "t_max", "hour_at_t_min", "warn", "error", "is_error", "block_size_max",
         "first_component", "first_event_type", "event_types", "components", "source_ips", "destination_ips",
-        "seen_rows", "last_event_seconds", "early_alert_k",
+        "seen_rows", "last_event_seconds", "early_alert_k", "dedupe",
     )
 
-    def __init__(self, block_id: str):
+    def __init__(self, block_id: str, dedupe: bool = True):
         self.block_id = block_id
+        self.dedupe = dedupe
         self.n = 0
         self.t_min = self.t_max = None
         self.hour_at_t_min = None
@@ -118,9 +119,11 @@ class BlockState:
             event["date"], event["time"], event["pid"], event["log_level"], event["component"], event["event_type"],
             event["source_ip"], event["destination_ip"], event["block_size"], event["raw_message"],
         )
-        if row_key in self.seen_rows:
-            return False
-        self.seen_rows.add(row_key)
+        if self.dedupe:
+            # Same rule as the batch cleaner for this source.
+            if row_key in self.seen_rows:
+                return False
+            self.seen_rows.add(row_key)
 
         component = encoder.code("component", event["component"])
         event_type = encoder.code("event_type", event["event_type"])

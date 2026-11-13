@@ -1,5 +1,8 @@
 # MorphGuard — System Architecture Documentation
 
+![MorphGuard architecture](architecture_diagram.svg)
+
+
 ---
 
 ## 1. Overview
@@ -88,8 +91,10 @@ The stream processor loads the batch-trained models from disk: the early-warning
 - `django_parser.py`: Parser for application-level web server event streams.
 
 ### 3.2 Feature Engineering (`feature_engineering/`)
-- `data_cleaner.py`: Deduplication, missing value imputation, and timestamp alignment.
-- `feature_extractor.py`: Aggregates per `block_id` into event frequency vectors (E1–E29), sequence count, and lifecycle duration.
+- `data_cleaner.py`: validates the common schema, coerces types, and drops rows missing a required field. It removes exact-duplicate lines when the source's `dedupe` setting is on, which it is for all sources except Apache: Apache's 1-second timestamps make real bursts look like duplicates.
+- `feature_extractor.py`: one row per `block_id` with 8 numeric features: `hour_of_day`, `is_error`, the block's dominant component, event type, source IP and destination IP (as stable category codes), `block_size` and `event_frequency` (line count). No scaling: Isolation Forest splits on raw values.
+- `category_encoder.py`: the persisted, append-only vocabulary that every model is stamped with.
+- `block_metadata.py`: per-block metadata and dataset stats for the API, for any source.
 
 ### 3.3 Detection Engine (`detection/`)
 - `isolation_forest.py`: Unsupervised tree ensemble wrapper for scoring and thresholding.
@@ -144,6 +149,12 @@ The precision-vs-lead-time Pareto front is k = 5, 10 and 20. The best trade-off 
 At k ≤ 10, most correct alerts are short blocks that had already ended (1,826 of 1,854 at k = 5). Measured on blocks still running when the alert fires, only k = 20 warns early in practice: precision 0.6961, recall 0.5266, mean lead 0.339 of the block, median 2.9 h before the block's last line.
 
 ### 3.8 Real-Time Streaming Layer (`streaming/`, `stream_api.py`, `docker-compose.yml`)
+- **Why a Python stream processor and not Apache Flink (decision D3).** The original diagram had a Kafka/Flink box. It is now "Kafka + Python stream processor", for three reasons:
+  1. The stream must score with the batch pipeline's own Python feature code and scikit-learn models. `tests/test_streaming.py` checks that streamed features equal batch features exactly. PyFlink would run that same Python inside a JVM cluster and add nothing to the result.
+  2. One consumer process handled the 1,000,000-line verification replay on a laptop, and the demo VM has 8 GB.
+  3. Kafka's keyed partitions already give per-block ordering, which is the property the per-block state needs.
+
+  What Flink would add is checkpointed, exactly-once state that survives restarts. That is listed as future work.
 - **Broker:** a single Kafka broker in KRaft mode with three topics: `logs.raw`, `alerts` and `storage.decisions`.
 - **Producer:** `producer.py` replays log lines at a fixed rate, keyed by block id so each block's lines stay on one partition, in order.
 - **Processor:** `processor.py` parses each line with the HDFS parser and drops lines the way the batch cleaner would. It keeps per-block running state whose features equal the batch prefix and full-block features; a test checks this parity.
@@ -183,26 +194,29 @@ Two caveats:
 Raw Log Stream
       │
       ▼
-Regex Tokenization & Parsing  ──>  Structured DataFrame
-                                             │
-                                             ▼
-                                   Block Aggregation & Scaling
-                                             │
-                                             ▼
-                                   Feature Matrix (X)
-                                       │            │
-                                       ▼            ▼
-                                 Active Model   GA Evaluator
-                                 (Predict API)  (Candidate Refinement)
-                                       │            │
-                                       ▼            ▼
-                                   Alert Stream  Model Registry
+Source parser (5 formats)  ──>  common-schema rows
+                                       │
+                                       ▼
+                             Cleaner (per-source dedupe)
+                                       │
+                                       ▼
+                       Block aggregation -> 8 features per block
+                       (stable category codes, no scaling)
+                         │                │                 │
+                         ▼                ▼                 ▼
+                  Deployed model     GA + promote-     Early warning
+                  (score, label)     if-better         (first k events)
+                         │           (+ analyst            │
+                         ▼            feedback)            ▼
+                  Smart Storage           │            alerts
+                  (HOT/WARM/COLD)         ▼
+                                    Model lineage per source
 ```
 
 ---
 
 ## 5. Security & Deployment
 
-- **Containerization**: Stateless Flask containers scalable behind an NGINX reverse proxy.
+- **Deployment**: one GCP VM. nginx serves the built React app and proxies `/api` to gunicorn, which runs as the systemd service `morphguard`. MongoDB Atlas handles accounts. Kafka runs in Docker (`docker-compose.yml`) when the live stream is demonstrated.
 - **Model Registry**: Atomic updates with JSON metadata tracking commit hash, F1 score, and active feature masks.
 - **Secrets Management**: Environment-variable based credentials (`JWT_SECRET`, `MONGO_URI`).
