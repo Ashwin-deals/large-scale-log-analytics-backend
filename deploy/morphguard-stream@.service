@@ -1,5 +1,5 @@
 # Stream processor for one log source: systemctl enable --now morphguard-stream@hdfs
-# deploy/vm_deploy.sh (WITH_STREAM=1) installs it with __USER__ and __BACKEND__
+# deploy/vm_deploy.sh (WITH_STREAM=1) installs it with the deploy user and backend path
 # filled in (in a system unit %u/%h would be root's). Kafka must be up first.
 [Unit]
 Description=MorphGuard stream processor (%i)
