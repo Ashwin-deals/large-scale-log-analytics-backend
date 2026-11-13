@@ -618,6 +618,13 @@ class StorageApiTest(unittest.TestCase):
         self.assertLess(body["policy"]["thresholds"]["warm"], body["policy"]["thresholds"]["hot"])
         self.assertEqual(body["model"]["kind"], "tune_half_refit")
 
+    def test_model_version_is_read_from_the_source_model_file_when_missing(self):
+        # Per-source policies (multi_source/pipeline.py) record no version number.
+        api = self.storage_api
+        self.assertEqual(api._model_for_display({"hyperparameters_from": "data/models/openstack/isolation_forest_v2.pkl"})["version"], 2)
+        self.assertEqual(api._model_for_display({"version": 3, "hyperparameters_from": "x_v2.pkl"})["version"], 3)
+        self.assertIsNone(api._model_for_display({"model_path": "m.pkl"})["version"])
+
     def test_simulate_without_overrides_reproduces_the_holdout_report(self):
         body = self.simulate({}).get_json()
         expected = evaluate_policy(self.holdout, self.policy, 0.5)

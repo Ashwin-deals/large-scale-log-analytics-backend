@@ -12,6 +12,7 @@ blocks only -- uploads carry no ground truth, so retention can't be computed.
 """
 
 import json
+import re
 import threading
 from pathlib import Path
 
@@ -94,6 +95,18 @@ def _is_stale(policy_payload: dict, ctx: SourceContext) -> bool:
     version = policy_payload.get("model", {}).get("version")
     # Per-source policies record the model path rather than a version number.
     return version is not None and version != _deployed_version(ctx)
+
+
+_VERSION_IN_PATH = re.compile(r"_v(\d+)\.pkl$")
+
+
+def _model_for_display(model: dict) -> dict:
+    """Per-source policies record which deployed model their hyperparameters
+    came from but not its version number; read it from that file name."""
+    if model.get("version") is not None:
+        return model
+    match = _VERSION_IN_PATH.search(str(model.get("hyperparameters_from", "")))
+    return {**model, "version": int(match.group(1)) if match else None}
 
 
 def _scored_frame(model_path: str, ctx: SourceContext | None = None):
@@ -194,7 +207,7 @@ def get_policy():
         {
             "policy": payload["policy"],
             "retention_target": payload["retention_target"],
-            "model": payload["model"],
+            "model": _model_for_display(payload["model"]),
             "generated_at": payload["generated_at"],
             "stale": _is_stale(payload, ctx),
             "source": ctx.name,
@@ -218,6 +231,8 @@ def get_summary():
     # version is promoted the numbers here describe a model no longer live.
     report["stale"] = _is_stale(report, ctx)
     report["source"] = {"name": ctx.name, "title": ctx.title, "label_kind": ctx.label_kind, "block_noun": ctx.block_noun}
+    if "model" in report:
+        report["model"] = _model_for_display(report["model"])
     return jsonify(report)
 
 
