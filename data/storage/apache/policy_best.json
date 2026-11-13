@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-12T12:39:21+0530",
+  "generated_at": "2026-11-13T22:15:00+0530",
   "model": {
     "kind": "tune_half_refit",
     "model_path": "data/storage/apache/isolation_forest_tune_half.pkl",
@@ -8,22 +8,22 @@
   },
   "policy": {
     "weights": {
-      "anomaly_score": 0.4429468726904555,
-      "event_frequency": 0.0023117208387273846,
-      "block_size": 0.5547414064708172
+      "anomaly_score": 0.30027235505607835,
+      "event_frequency": 0.37766951012168926,
+      "block_size": 0.32205813482223244
     },
     "error_weight": 0.2,
     "thresholds": {
-      "hot": 0.6110639280747412,
-      "warm": 0.03941408696681144
+      "hot": 0.5076107221741402,
+      "warm": 0.2557916547264022
     },
-    "summary_fraction": 0.03592464230262555
+    "summary_fraction": 0.01662168473002946
   },
   "normalizer": {
-    "score_min": -0.21349741758592772,
-    "score_max": 0.19664201645420631,
+    "score_min": -0.13295552536299066,
+    "score_max": 0.13432861712593236,
     "log_freq_min": 0.6931471805599453,
-    "log_freq_max": 5.66988092298052,
+    "log_freq_max": 7.160069207596127,
     "size_quantiles": [
       0.0,
       0.0,
@@ -1031,8 +1031,10 @@
   "retention_target": 0.95,
   "penalty_weight": 1000.0,
   "warm_credit": 0.5,
+  "warm_ref_fraction": 0.25,
   "split": {
     "test_size": 0.5,
-    "seed": 42
+    "seed": 42,
+    "protocol": "holdout"
   }
 }

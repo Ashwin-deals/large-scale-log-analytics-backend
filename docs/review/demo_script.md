@@ -69,7 +69,7 @@ Held-out test sets. The labels are not ground truth.
 | Source | Labels | V1 F1 | GA F1 | Caught | Lines saved |
 |---|---|---|---|---|---|
 | OpenStack | by run | 0.111 | 0.138 | 12 of 59 | 31.4% |
-| Apache | injected | 0.336 | 0.722 | 61 of 74 | 39.5% |
+| Apache | injected | 0.301 | 0.607 | 44 of 74 | 23.3% |
 | CloudTrail | weak rules | 0.115 | 0.615 | 155 of 211 | 11.8% |
 | Django | synthetic | 0.158 | 0.436 | 17 of 24 | 71.0% |
 
@@ -114,6 +114,12 @@ lines, not bytes.
 Only at k = 20. At smaller k, the precision comes from short blocks that had already ended. Three
 quarters of HDFS blocks have 20 events or fewer, so there is nothing early to give for them. The 2.9 h is
 measured to the block's last log line, not to when someone would notice.
+
+**Why did Apache's F1 drop from 0.722 to 0.607?**
+The old figure was measured on a log missing 37.9% of its real lines. The shared cleaner had treated
+repeated lines inside one second as duplicates and collapsed them, which hid the bursts. With the real
+lines kept, detection is harder: 44 of 74 anomalies are caught instead of 61. Early warning got better
+(F1 0.497 → 0.564), and 94.4% of anomalies are now kept in full, up from 87.1%.
 
 **Are the four extra sources real results?**
 - HDFS is validated.
