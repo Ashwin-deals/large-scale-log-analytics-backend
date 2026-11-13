@@ -1,0 +1,239 @@
+{
+  "generated_at": "2026-11-13T00:06:31+0530",
+  "protocol": "Each version's hyperparameters and features are refitted (sklearn clone) on the stratified training split only and scored on the held-out split. 'published_model_on_test_rows_in_sample' scores the saved pickle, which was fitted on every block, on the same rows -- in-sample, for reference.",
+  "data": {
+    "features_path": "data/features/features.csv",
+    "blocks": 150000,
+    "anomalies": 4392,
+    "note": "Blocks in the local feature set. 575,061 means the full HDFS corpus; fewer means a sample."
+  },
+  "split": {
+    "test_size": 0.3,
+    "seed": 42,
+    "train": {
+      "blocks": 105000,
+      "anomalies": 3074
+    },
+    "test": {
+      "blocks": 45000,
+      "anomalies": 1318
+    }
+  },
+  "deployed_version": 2,
+  "versions": {
+    "V1": {
+      "deployed": false,
+      "features": [
+        "hour_of_day",
+        "component_encoded",
+        "event_type_encoded",
+        "block_size",
+        "event_frequency",
+        "source_ip_encoded",
+        "destination_ip_encoded"
+      ],
+      "hyperparameters": {
+        "n_estimators": 100,
+        "max_samples": "auto",
+        "max_features": 1.0,
+        "contamination": "auto",
+        "bootstrap": false,
+        "random_state": 42
+      },
+      "refit_train": {
+        "accuracy": 0.8307619047619048,
+        "precision": 0.09877689199519493,
+        "recall": 0.588484059856864,
+        "f1": 0.16916027679072376,
+        "flagged": 18314,
+        "true_positives": 1809,
+        "false_positives": 16505,
+        "missed": 1265
+      },
+      "refit_test": {
+        "accuracy": 0.8300222222222222,
+        "precision": 0.09803174603174603,
+        "recall": 0.5857359635811836,
+        "f1": 0.1679538779506146,
+        "flagged": 7875,
+        "true_positives": 772,
+        "false_positives": 7103,
+        "missed": 546
+      },
+      "published_model_on_test_rows_in_sample": {
+        "accuracy": 0.7082222222222222,
+        "precision": 0.06264810426540285,
+        "recall": 0.6418816388467374,
+        "f1": 0.11415463500202402,
+        "flagged": 13504,
+        "true_positives": 846,
+        "false_positives": 12658,
+        "missed": 472
+      },
+      "fit_seconds": 0.66
+    },
+    "V2": {
+      "deployed": true,
+      "features": [
+        "component_encoded",
+        "event_frequency",
+        "destination_ip_encoded"
+      ],
+      "hyperparameters": {
+        "n_estimators": 150,
+        "max_samples": 0.7273078084478353,
+        "max_features": 0.7962072844310213,
+        "contamination": 0.02347061968879934,
+        "bootstrap": false,
+        "random_state": 42
+      },
+      "refit_train": {
+        "accuracy": 0.9774857142857143,
+        "precision": 0.6531492666091459,
+        "recall": 0.49251789199739754,
+        "f1": 0.5615727002967359,
+        "flagged": 2318,
+        "true_positives": 1514,
+        "false_positives": 804,
+        "missed": 1560
+      },
+      "refit_test": {
+        "accuracy": 0.9779777777777777,
+        "precision": 0.6649848637739657,
+        "recall": 0.5,
+        "f1": 0.5708098744045041,
+        "flagged": 991,
+        "true_positives": 659,
+        "false_positives": 332,
+        "missed": 659
+      },
+      "published_model_on_test_rows_in_sample": {
+        "accuracy": 0.9758444444444444,
+        "precision": 0.6137931034482759,
+        "recall": 0.47268588770864944,
+        "f1": 0.534076296613802,
+        "flagged": 1015,
+        "true_positives": 623,
+        "false_positives": 392,
+        "missed": 695
+      },
+      "fit_seconds": 1.27
+    },
+    "V3": {
+      "deployed": false,
+      "features": [
+        "block_size",
+        "event_frequency"
+      ],
+      "hyperparameters": {
+        "n_estimators": 75,
+        "max_samples": 0.1345893626256359,
+        "max_features": 0.5953955400398291,
+        "contamination": 0.020867158699028138,
+        "bootstrap": false,
+        "random_state": 1951368095
+      },
+      "refit_train": {
+        "accuracy": 0.9787523809523809,
+        "precision": 0.7037216046399226,
+        "recall": 0.47364996746909566,
+        "f1": 0.5662064942640482,
+        "flagged": 2069,
+        "true_positives": 1456,
+        "false_positives": 613,
+        "missed": 1618
+      },
+      "refit_test": {
+        "accuracy": 0.9792222222222222,
+        "precision": 0.7158962795941376,
+        "recall": 0.48179059180576633,
+        "f1": 0.5759637188208617,
+        "flagged": 887,
+        "true_positives": 635,
+        "false_positives": 252,
+        "missed": 683
+      },
+      "published_model_on_test_rows_in_sample": {
+        "accuracy": 0.9793111111111111,
+        "precision": 0.7231833910034602,
+        "recall": 0.4757207890743551,
+        "f1": 0.5739130434782609,
+        "flagged": 867,
+        "true_positives": 627,
+        "false_positives": 240,
+        "missed": 691
+      },
+      "fit_seconds": 0.55
+    }
+  },
+  "stability_across_splits": {
+    "seeds": [
+      42,
+      1,
+      7,
+      123,
+      2024
+    ],
+    "versions": {
+      "V1": {
+        "train_f1": [
+          0.16916027679072376,
+          0.17320230558442787,
+          0.16336131727298536,
+          0.1825203071596609,
+          0.1594492371764906
+        ],
+        "test_f1": [
+          0.1679538779506146,
+          0.17050186280955512,
+          0.16456422018348624,
+          0.1819496076001652,
+          0.15773809523809523
+        ],
+        "test_f1_mean": 0.16854153275638328,
+        "test_f1_std": 0.007956104330872594
+      },
+      "V2": {
+        "train_f1": [
+          0.5615727002967359,
+          0.5936655079181151,
+          0.5907238501843586,
+          0.5900487804878048,
+          0.5693106004447739
+        ],
+        "test_f1": [
+          0.5708098744045041,
+          0.5797896662094193,
+          0.5867992766726944,
+          0.5871313672922251,
+          0.5527114967462039
+        ],
+        "test_f1_mean": 0.5754483362650094,
+        "test_f1_std": 0.012827029332960994
+      },
+      "V3": {
+        "train_f1": [
+          0.5662064942640482,
+          0.5712115457652868,
+          0.5649237893112097,
+          0.5662535748331744,
+          0.5674135966578048
+        ],
+        "test_f1": [
+          0.5759637188208617,
+          0.5569050832208727,
+          0.5658844765342961,
+          0.5622241835834069,
+          0.5564044943820224
+        ],
+        "test_f1_mean": 0.563476391308292,
+        "test_f1_std": 0.00716231894240552
+      }
+    },
+    "wins_per_version": {
+      "V1": 0,
+      "V2": 3,
+      "V3": 2
+    }
+  }
+}

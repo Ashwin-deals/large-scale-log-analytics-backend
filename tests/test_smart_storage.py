@@ -178,8 +178,8 @@ class TierAccountingTest(unittest.TestCase):
         self.assertEqual(tiers.tolist(), [HOT, WARM, WARM, COLD, HOT, COLD])
 
     def test_lines_kept_per_tier(self):
-        # Hot keeps all 100; warm keeps max(1, round(0.1 * 100)) = 10 and
-        # max(1, round(0.1 * 4)) = 1 (the floor); cold keeps 1 whatever its size.
+        # Hot keeps all 100; warm keeps 1 metadata line + round(0.1 * 100) = 11
+        # and 1 + round(0.1 * 4) = 1 (summary rounds to 0); cold keeps 1 whatever its size.
         table = manual_table(
             scores=[0.9, 0.5, 0.5, 0.1, 0.1],
             ef=[100, 100, 4, 50, 2],
@@ -187,16 +187,16 @@ class TierAccountingTest(unittest.TestCase):
         )
         outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.1))
         self.assertEqual(outcome.tier_counts, {"HOT": 1, "WARM": 2, "COLD": 2})
-        self.assertEqual(outcome.tier_lines, {"HOT": 100, "WARM": 11, "COLD": 2})
+        self.assertEqual(outcome.tier_lines, {"HOT": 100, "WARM": 12, "COLD": 2})
         self.assertEqual(outcome.total_lines, 256)
-        self.assertEqual(outcome.kept_lines, 113)
-        self.assertAlmostEqual(outcome.storage_saved_pct, 100 * (1 - 113 / 256))
+        self.assertEqual(outcome.kept_lines, 114)
+        self.assertAlmostEqual(outcome.storage_saved_pct, 100 * (1 - 114 / 256))
 
     def test_summary_rounds_half_to_even_like_python(self):
         # f * ef = 2.5 -> round() gives 2, not 3.
         table = manual_table([0.5], [25], [False])
         outcome = evaluate_policy(table, anomaly_only_policy(0.9, 0.1, 0.1))
-        self.assertEqual(outcome.tier_lines["WARM"], max(1, round(0.1 * 25)))
+        self.assertEqual(outcome.tier_lines["WARM"], 1 + round(0.1 * 25))
 
     def test_retention_weights_hot_warm_and_cold(self):
         # Anomalies: one HOT, one WARM, one COLD.
@@ -214,8 +214,9 @@ class TierAccountingTest(unittest.TestCase):
         self.assertAlmostEqual(outcome.flagged_retention, 1.0)
 
     def test_warm_credit_bounds_reduce_to_full_retention_and_coverage(self):
+        # f = 0.3 keeps 3 of 10 lines, above the 0.25 reference, so WARM earns full credit.
         table = manual_table([0.9, 0.5, 0.5, 0.1], [10] * 4, [True, True, True, True])
-        policy = anomaly_only_policy(0.8, 0.4, 0.2)
+        policy = anomaly_only_policy(0.8, 0.4, 0.3)
         none = evaluate_policy(table, policy, warm_credit=0.0)
         full = evaluate_policy(table, policy, warm_credit=1.0)
         self.assertAlmostEqual(none.weighted_retention, none.full_retention)
@@ -225,7 +226,7 @@ class TierAccountingTest(unittest.TestCase):
 
     def test_fitness_and_target_use_weighted_retention(self):
         table = manual_table([0.9, 0.5], [10, 10], [True, True])
-        outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.2), warm_credit=0.8)
+        outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.3), warm_credit=0.8)
         self.assertAlmostEqual(outcome.weighted_retention, 0.9)
         self.assertTrue(outcome.meets_target(0.9))
         self.assertFalse(outcome.meets_target(0.91))
@@ -233,13 +234,60 @@ class TierAccountingTest(unittest.TestCase):
 
     def test_warm_credit_lets_a_cheap_summary_replace_a_full_copy(self):
         # Two big anomalous blocks. All-HOT keeps 200 lines; demoting one to a
-        # 10-line WARM summary keeps 110 and, at credit 0.8, still meets 0.9.
+        # metadata line + 25-line summary (the 0.25 reference share) keeps 126 and, at
+        # credit 0.8, still meets 0.9.
         table = manual_table([0.9, 0.5], [100, 100], [True, True])
-        all_hot = evaluate_policy(table, anomaly_only_policy(0.4, 0.2, 0.1), warm_credit=0.8)
-        one_warm = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.1), warm_credit=0.8)
-        self.assertEqual((all_hot.kept_lines, one_warm.kept_lines), (200, 110))
+        all_hot = evaluate_policy(table, anomaly_only_policy(0.4, 0.2, 0.25), warm_credit=0.8)
+        one_warm = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.25), warm_credit=0.8)
+        self.assertEqual((all_hot.kept_lines, one_warm.kept_lines), (200, 126))
         self.assertTrue(one_warm.meets_target(0.9))
         self.assertGreater(one_warm.fitness(0.9), all_hot.fitness(0.9))
+
+    def test_warm_credit_is_proportional_to_the_share_kept(self):
+        # One WARM anomaly of 100 lines; credit = 0.5 * min(1, summary / 25).
+        table = manual_table([0.5], [100], [True])
+        for f, expected in ((0.05, 0.5 * 5 / 25), (0.1, 0.5 * 10 / 25), (0.25, 0.5), (0.5, 0.5)):
+            outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, f), warm_credit=0.5)
+            self.assertAlmostEqual(outcome.weighted_retention, expected, msg=f"f={f}")
+            self.assertAlmostEqual(outcome.warm_credit_earned, expected)
+        self.assertAlmostEqual(outcome.coverage, 1.0)
+        self.assertAlmostEqual(outcome.full_retention, 0.0)
+
+    def test_a_summary_that_costs_what_cold_costs_earns_nothing(self):
+        # The old collapse: an 18-line block at f = 0.0565 kept 1 line -- the
+        # COLD cost -- yet earned the flat 0.5. Now round(0.0565 * 18) = 1
+        # summary line on top of the metadata line, earning 0.5 * 1 / 4.5;
+        # and at f = 0.02 the summary rounds to 0, so it is COLD in all but name.
+        table = manual_table([0.5], [18], [True])
+        thin = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.0565), warm_credit=0.5)
+        self.assertEqual(thin.tier_lines["WARM"], 2)
+        self.assertAlmostEqual(thin.weighted_retention, 0.5 / 4.5)
+        empty = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.02), warm_credit=0.5)
+        self.assertEqual(empty.tier_lines["WARM"], 1)
+        self.assertEqual(empty.weighted_retention, 0.0)
+
+    def test_warm_never_costs_less_than_cold(self):
+        table = manual_table([0.5, 0.1], [2, 2], [False, False])
+        outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.01))
+        self.assertEqual(outcome.tier_lines["WARM"], outcome.tier_lines["COLD"])
+
+    def test_reference_fraction_is_configurable_and_validated(self):
+        table = manual_table([0.5], [100], [True])
+        policy = anomaly_only_policy(0.8, 0.4, 0.1)  # keeps 10 lines
+        strict = evaluate_policy(table, policy, warm_credit=0.5, warm_ref_fraction=0.5)
+        loose = evaluate_policy(table, policy, warm_credit=0.5, warm_ref_fraction=0.1)
+        self.assertAlmostEqual(strict.weighted_retention, 0.5 * 10 / 50)
+        self.assertAlmostEqual(loose.weighted_retention, 0.5)
+        self.assertEqual(strict.kept_lines, loose.kept_lines)  # credit never changes cost
+        for bad in (0.0, -0.1, 1.5):
+            with self.assertRaises(ValueError):
+                evaluate_policy(table, policy, warm_ref_fraction=bad)
+
+    def test_warm_credit_earned_is_zero_without_warm_anomalies(self):
+        table = manual_table([0.9, 0.5], [10, 10], [True, False])
+        outcome = evaluate_policy(table, anomaly_only_policy(0.8, 0.4, 0.3))
+        self.assertEqual(outcome.warm_credit_earned, 0.0)
+        self.assertEqual(outcome.to_dict()["warm_ref_fraction"], 0.25)
 
     def test_no_anomalies_means_full_retention(self):
         table = manual_table([0.1, 0.2], [5, 5], [False, False])
@@ -409,8 +457,11 @@ class OptimizerTest(unittest.TestCase):
         policy_payload, report = build_report(clean, deployed, 0.95, 1000.0, 0.5, 1, warm_credit=0.5, n_random_trials=3)
         json.dumps(policy_payload)
         json.dumps(report)  # must be serializable as-is
-        for key in ("policy", "normalizer", "retention_target", "warm_credit", "split", "model"):
+        for key in ("policy", "normalizer", "retention_target", "warm_credit", "warm_ref_fraction", "split", "model"):
             self.assertIn(key, policy_payload)
+        self.assertEqual(report["config"]["warm_ref_fraction"], 0.25)
+        for key in ("mean_share_of_block_kept", "mean_credit_per_warm_anomaly", "warm_ref_fraction"):
+            self.assertIn(key, report["warm_tier"])
         self.assertEqual(policy_payload["model"]["kind"], "tune_half_refit")  # the clean policy is the one served
         for key in ("holdout", "tuning", "baselines", "ga_history", "split", "ga_beats_baselines", "config",
                     "warm_tier", "deployed_model_scoring", "holdout_comparison"):
@@ -582,14 +633,23 @@ class StorageApiTest(unittest.TestCase):
         self.assertEqual(len(self.scored_with), 1)
 
     def test_warm_credit_override_changes_retention_not_cost(self):
-        # Put most blocks in WARM so the credit visibly matters.
-        payload = {"t_hot": 0.9, "t_warm": 0.01}
+        # Put most blocks in WARM so the credit visibly matters; summaries at
+        # half the block are above the reference share, so credit 1 is full credit.
+        payload = {"t_hot": 0.9, "t_warm": 0.01, "summary_fraction": 0.5}
         none = self.simulate({**payload, "warm_credit": 0.0}).get_json()
         full = self.simulate({**payload, "warm_credit": 1.0}).get_json()
         self.assertEqual(none["outcome"]["kept_lines"], full["outcome"]["kept_lines"])
         self.assertAlmostEqual(none["outcome"]["weighted_retention"], none["outcome"]["full_retention"])
         self.assertAlmostEqual(full["outcome"]["weighted_retention"], full["outcome"]["coverage"])
         self.assertGreater(full["outcome"]["weighted_retention"], none["outcome"]["weighted_retention"])
+
+    def test_warm_ref_fraction_override_changes_retention_not_cost(self):
+        payload = {"t_hot": 0.9, "t_warm": 0.01, "summary_fraction": 0.1, "warm_credit": 1.0}
+        loose = self.simulate({**payload, "warm_ref_fraction": 0.05}).get_json()
+        strict = self.simulate({**payload, "warm_ref_fraction": 1.0}).get_json()
+        self.assertEqual(strict["warm_ref_fraction"], 1.0)
+        self.assertEqual(loose["outcome"]["kept_lines"], strict["outcome"]["kept_lines"])
+        self.assertGreater(loose["outcome"]["weighted_retention"], strict["outcome"]["weighted_retention"])
 
     def test_raising_t_hot_keeps_fewer_hot_blocks(self):
         loose = self.simulate({"t_hot": 0.2, "t_warm": 0.1}).get_json()
@@ -617,6 +677,8 @@ class StorageApiTest(unittest.TestCase):
             {"warm_credit": 1.5},
             {"warm_credit": -0.1},
             {"warm_credit": "half"},
+            {"warm_ref_fraction": 0},
+            {"warm_ref_fraction": 1.5},
         ]
         for payload in bad_payloads:
             response = self.simulate(payload)

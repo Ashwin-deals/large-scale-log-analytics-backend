@@ -54,6 +54,7 @@ In a second terminal:
 
 ```bash
 python3 -m streaming.producer --limit 50000 --rate 5000     # 50,000 real lines at 5,000/s (~10 s)
+python3 -m streaming.producer --limit 1000000 --rate 0     # the B3 verification replay (~3 s to send)
 ```
 
 `--rate 0` sends as fast as possible, and leaving out `--limit` replays the whole file.
@@ -82,13 +83,30 @@ storage saved so far, and tier counts. `live` turns false 10 s after the process
 - **Block completion is a timeout.** HDFS has no "block finished" event, so a block is finalized
   after `--idle-timeout` of log-time silence. A line for an already-finalized block is counted as
   `late_events` and ignored.
-- **A short replay cuts blocks off mid-life.** 50,000 lines is only about 12 minutes of log time.
-  In the verification run, 4,048 of the 4,087 blocks were forced out by the end-of-stream flush before they
-  had finished (median 13 of 25 events), and a truncated block looks anomalous to a whole-block model.
-  Of the 39 blocks that were complete, all 39 were flagged and all 39 are true anomalies. Of the 4,048 cut-off ones,
-  585 were flagged but only 16 are true anomalies. Alerts carry `finalize_reason`, and `end_of_stream`
-  marks a forced finalization. Replay more of the log (e.g. `--limit 1000000 --rate 0`) for
-  timeout-based completion.
+- **A replay cuts blocks off mid-life, and so does the idle timeout.** A truncated block looks anomalous
+  to a whole-block model. Alerts carry `finalize_reason`, and `end_of_stream` marks a forced finalization.
+  To score a run against the labels, split by whether each block was really complete:
+
+  ```bash
+  python3 scripts/analyze_stream_run.py --run-id <run id> --replayed-lines <producer --limit>
+  ```
+
+  **Verification replay (B3).** The first 1,000,000 HDFS lines (about 3.5 hours of log time) were replayed at full speed, run id `b3-1m`. `scripts/analyze_stream_run.py` read every decision and alert back from Kafka and joined them with `anomaly_label.csv`. A block counts as **complete** only if all of its lines in the full `HDFS.log` fell inside the replay (`data/evaluation/stream_run_report.json`).
+
+  | Blocks (66,167 decided) | Blocks | Anomaly share | Block-anomaly precision | Recall | False-alarm rate |
+  |---|---:|---:|---:|---:|---:|
+  | Complete | 2,528 | 51.5% | **0.986** | **0.934** | **1.39%** |
+  | Cut off | 63,639 | 2.6% | 0.049 | 0.180 | 9.31% |
+
+  | Early warning (k = 20) | Blocks reaching 20 events | Alerts | True | Precision | Recall | False-alarm rate |
+  |---|---:|---:|---:|---:|---:|---:|
+  | Complete blocks | 88 | 22 | 21 | **0.955** | 0.247 | — (3 normal blocks) |
+  | Cut-off blocks | 1,560 | 142 | 131 | **0.923** | 0.784 | 0.79% |
+
+  - **Lead time on complete blocks:** a true early warning fired with a median 28.6% of the block still to come, a median 285 s (4.8 min) before the block's last line. For cut-off blocks the end is outside the replay; the median of 1,758 s to the last line *seen* is only a lower bound.
+  - **Complete blocks are mostly anomalous** (51.5% against 2.9% overall), because failing blocks end early. That inflates precision, so the false-alarm rate (1.39% of complete normal blocks; batch V2 is 0.93%) is the fairer number.
+  - **The whole-block verdict is unreliable on partial blocks.** That covers 6,071 of 7,303 block-anomaly alerts, nearly all of them false. Early warning does not have this problem: it only scores a block's first 20 events, which a partial block has.
+  - **The 1-hour idle timeout is too short for HDFS.** 34,321 of the 36,279 blocks finalized by timeout had more lines later, because HDFS blocks routinely go quiet for hours between write and read or delete. Those blocks look truncated, and timeout-finalized blocks give block-anomaly precision of 0.145 (929 of 6,396).
 - **State is in memory.** A restarted processor starts its blocks fresh.
 - **The vocabulary is read-only.** Category codes come from `data/features/category_encoders.json`.
   A value it has never seen gets a temporary in-memory code and is never written back, and status

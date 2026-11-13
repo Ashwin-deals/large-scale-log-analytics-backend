@@ -148,5 +148,18 @@
     "promoted_model_path": "data/models/isolation_forest_v3.pkl",
     "promoted_metrics_path": "data/evaluation/isolation_forest_v3_metrics.json",
     "archived_candidate_path": null
+  },
+  {
+    "timestamp": "2026-09-09T04:40:48.924857+00:00",
+    "event": "rollback",
+    "metric": "f1",
+    "promoted": false,
+    "from_version": 3,
+    "to_version": 2,
+    "to_metric_value": 0.5288384512683578,
+    "reason": "Not recorded at the time; awaiting confirmation from the team. Manual override of promote-if-better, not a metric decision: V3 scored higher in-sample (F1 0.5622 vs 0.5288).",
+    "backfilled": true,
+    "backfilled_at": "2026-11-13",
+    "how_applied": "current_version.json edited by hand (its note: 'Manually rolled back from V3 to V2.'); committed in 28e14ea on 2026-10-25"
   }
 ]

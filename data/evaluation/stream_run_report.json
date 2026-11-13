@@ -1,0 +1,274 @@
+{
+  "generated_at": "2026-11-13T00:20:55+05:30",
+  "run_id": "b3-1m",
+  "replayed_lines": 1000000,
+  "definitions": {
+    "complete": "all of the block's lines in the full HDFS.log fall inside the replayed prefix",
+    "cut_off": "the block has lines after the replayed prefix, so it was decided on part of its life",
+    "lead_fraction": "share of the block's events still to come when the early warning fired",
+    "lead_seconds": "log seconds from the early warning (k-th event) to the block's last line in the replay"
+  },
+  "blocks": {
+    "total": 66167,
+    "complete": 2528,
+    "cut_off": 63639,
+    "by_finalize_reason": {
+      "timeout": 36279,
+      "end_of_stream": 29888
+    },
+    "timeout_but_cut_off": 34321,
+    "unlabeled": 0
+  },
+  "complete": {
+    "block_anomaly": {
+      "blocks": 2528,
+      "anomalies": 1301,
+      "alerts": 1232,
+      "true_alerts": 1215,
+      "false_alerts": 17,
+      "precision": 0.9862012987012987,
+      "recall": 0.9338970023059185,
+      "false_alarm_rate": 0.013854930725346373,
+      "anomaly_share": 0.5146360759493671
+    },
+    "early_warning": {
+      "blocks": 2528,
+      "anomalies": 1301,
+      "alerts": 22,
+      "true_alerts": 21,
+      "false_alerts": 1,
+      "precision": 0.9545454545454546,
+      "recall": 0.01614142966948501,
+      "false_alarm_rate": 0.0008149959250203749,
+      "anomaly_share": 0.5146360759493671,
+      "lead_fraction_true_alerts": {
+        "n": 21,
+        "mean": 0.28205128205128205,
+        "median": 0.2857142857142857
+      },
+      "lead_seconds_true_alerts": {
+        "n": 21,
+        "mean": 294.7142857142857,
+        "median": 285.0
+      },
+      "true_alerts_before_block_end": 21,
+      "on_blocks_reaching_k": {
+        "blocks": 88,
+        "anomalies": 85,
+        "alerts": 22,
+        "true_alerts": 21,
+        "false_alerts": 1,
+        "precision": 0.9545454545454546,
+        "recall": 0.24705882352941178,
+        "false_alarm_rate": 0.3333333333333333,
+        "anomaly_share": 0.9659090909090909
+      }
+    },
+    "lines_per_block": {
+      "mean": 11.606012658227849,
+      "median": 19.0
+    }
+  },
+  "cut_off": {
+    "block_anomaly": {
+      "blocks": 63639,
+      "anomalies": 1651,
+      "alerts": 6071,
+      "true_alerts": 298,
+      "false_alerts": 5773,
+      "precision": 0.04908581782243453,
+      "recall": 0.18049666868564507,
+      "false_alarm_rate": 0.09313092856681938,
+      "anomaly_share": 0.02594321092411886
+    },
+    "early_warning": {
+      "blocks": 63639,
+      "anomalies": 1651,
+      "alerts": 142,
+      "true_alerts": 131,
+      "false_alerts": 11,
+      "precision": 0.9225352112676056,
+      "recall": 0.07934585099939431,
+      "false_alarm_rate": 0.00017745370071626767,
+      "anomaly_share": 0.02594321092411886,
+      "lead_fraction_true_alerts": {
+        "n": 131,
+        "mean": 0.07309359259731178,
+        "median": 0.047619047619047616
+      },
+      "lead_seconds_true_alerts": {
+        "n": 131,
+        "mean": 1902.2290076335878,
+        "median": 1758.0
+      },
+      "true_alerts_before_block_end": 129,
+      "on_blocks_reaching_k": {
+        "blocks": 1560,
+        "anomalies": 167,
+        "alerts": 142,
+        "true_alerts": 131,
+        "false_alerts": 11,
+        "precision": 0.9225352112676056,
+        "recall": 0.7844311377245509,
+        "false_alarm_rate": 0.007896625987078248,
+        "anomaly_share": 0.10705128205128205
+      }
+    },
+    "lines_per_block": {
+      "mean": 13.766385392605164,
+      "median": 13.0
+    }
+  },
+  "all": {
+    "block_anomaly": {
+      "blocks": 66167,
+      "anomalies": 2952,
+      "alerts": 7303,
+      "true_alerts": 1513,
+      "false_alerts": 5790,
+      "precision": 0.20717513350677805,
+      "recall": 0.5125338753387534,
+      "false_alarm_rate": 0.09159218539903503,
+      "anomaly_share": 0.0446143848141823
+    },
+    "early_warning": {
+      "blocks": 66167,
+      "anomalies": 2952,
+      "alerts": 164,
+      "true_alerts": 152,
+      "false_alerts": 12,
+      "precision": 0.926829268292683,
+      "recall": 0.051490514905149054,
+      "false_alarm_rate": 0.00018982836352131614,
+      "anomaly_share": 0.0446143848141823,
+      "lead_fraction_true_alerts": {
+        "n": 152,
+        "mean": 0.10196274706134714,
+        "median": 0.047619047619047616
+      },
+      "lead_seconds_true_alerts": {
+        "n": 152,
+        "mean": 1680.1381578947369,
+        "median": 1615.0
+      },
+      "true_alerts_before_block_end": 150,
+      "on_blocks_reaching_k": {
+        "blocks": 1648,
+        "anomalies": 252,
+        "alerts": 164,
+        "true_alerts": 152,
+        "false_alerts": 12,
+        "precision": 0.926829268292683,
+        "recall": 0.6031746031746031,
+        "false_alarm_rate": 0.008595988538681949,
+        "anomaly_share": 0.1529126213592233
+      }
+    },
+    "lines_per_block": {
+      "mean": 13.683845421433645,
+      "median": 13.0
+    }
+  },
+  "by_finalize_reason": {
+    "end_of_stream": {
+      "block_anomaly": {
+        "blocks": 29888,
+        "anomalies": 1208,
+        "alerts": 907,
+        "true_alerts": 584,
+        "false_alerts": 323,
+        "precision": 0.6438809261300992,
+        "recall": 0.48344370860927155,
+        "false_alarm_rate": 0.011262203626220362,
+        "anomaly_share": 0.040417558886509636
+      },
+      "early_warning": {
+        "blocks": 29888,
+        "anomalies": 1208,
+        "alerts": 1,
+        "true_alerts": 1,
+        "false_alerts": 0,
+        "precision": 1.0,
+        "recall": 0.0008278145695364238,
+        "false_alarm_rate": 0.0,
+        "anomaly_share": 0.040417558886509636,
+        "lead_fraction_true_alerts": {
+          "n": 1,
+          "mean": 0.3939393939393939,
+          "median": 0.3939393939393939
+        },
+        "lead_seconds_true_alerts": {
+          "n": 1,
+          "mean": 1609.0,
+          "median": 1609.0
+        },
+        "true_alerts_before_block_end": 1,
+        "on_blocks_reaching_k": {
+          "blocks": 5,
+          "anomalies": 1,
+          "alerts": 1,
+          "true_alerts": 1,
+          "false_alerts": 0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "false_alarm_rate": 0.0,
+          "anomaly_share": 0.2
+        }
+      },
+      "lines_per_block": {
+        "mean": 12.767532119914346,
+        "median": 13.0
+      }
+    },
+    "timeout": {
+      "block_anomaly": {
+        "blocks": 36279,
+        "anomalies": 1744,
+        "alerts": 6396,
+        "true_alerts": 929,
+        "false_alerts": 5467,
+        "precision": 0.14524702939337086,
+        "recall": 0.5326834862385321,
+        "false_alarm_rate": 0.15830317069639496,
+        "anomaly_share": 0.04807188731773202
+      },
+      "early_warning": {
+        "blocks": 36279,
+        "anomalies": 1744,
+        "alerts": 163,
+        "true_alerts": 151,
+        "false_alerts": 12,
+        "precision": 0.9263803680981595,
+        "recall": 0.08658256880733944,
+        "false_alarm_rate": 0.00034747357753004196,
+        "anomaly_share": 0.04807188731773202,
+        "lead_fraction_true_alerts": {
+          "n": 151,
+          "mean": 0.10002912688334682,
+          "median": 0.047619047619047616
+        },
+        "lead_seconds_true_alerts": {
+          "n": 151,
+          "mean": 1680.609271523179,
+          "median": 1617.0
+        },
+        "true_alerts_before_block_end": 149,
+        "on_blocks_reaching_k": {
+          "blocks": 1643,
+          "anomalies": 251,
+          "alerts": 163,
+          "true_alerts": 151,
+          "false_alerts": 12,
+          "precision": 0.9263803680981595,
+          "recall": 0.601593625498008,
+          "false_alarm_rate": 0.008620689655172414,
+          "anomaly_share": 0.15276932440657334
+        }
+      },
+      "lines_per_block": {
+        "mean": 14.43873866424102,
+        "median": 13.0
+      }
+    }
+  }
+}

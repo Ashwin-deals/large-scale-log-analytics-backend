@@ -26,7 +26,7 @@ import pandas as pd
 
 from detection.predict import check_encoder_compatibility
 from smart_storage.data import POLICY_PATH, resolve_deployed_model
-from smart_storage.policy import COLD, HOT, WARM, BlockTable, Normalizer, StoragePolicy, assign_tiers, importance
+from smart_storage.policy import COLD, HOT, WARM, BlockTable, Normalizer, StoragePolicy, assign_tiers, importance, summary_lines
 
 EARLY_WARNING_DIR = Path("data/models/early_warning")
 TIER_NAMES = {HOT: "HOT", WARM: "WARM", COLD: "COLD"}
@@ -91,7 +91,8 @@ class Scorer:
         # Lines kept per tier, as smart_storage.policy.evaluate_policy costs them.
         lines_kept = np.where(
             tiers == HOT, event_frequency,
-            np.where(tiers == WARM, np.maximum(1, np.rint(self.policy.summary_fraction * event_frequency)).astype(np.int64), 1),
+            # WARM: COLD's metadata line plus the summary, exactly as evaluate_policy charges it.
+            np.where(tiers == WARM, 1 + summary_lines(event_frequency, self.policy.summary_fraction), 1),
         )
         return {
             "predicted_label": labels,

@@ -78,21 +78,32 @@ Selection is performed via tournament selection ($k=3$), followed by uniform cro
 
 ## 4. Dataset & Benchmarking
 
-The primary evaluation uses the HDFS benchmark from the LogHub dataset:
-- **Total Log Lines**: 11,175,629
-- **Unique Blocks**: 575,061
-- **Ground Truth**: 16,838 anomaly blocks (~2.9% contamination rate)
-- **Train/Test Split**: 80/20 stratified split
+The primary evaluation uses the HDFS_v1 benchmark from LogHub:
+- **Raw log lines**: 11,175,629 (11,173,511 events after cleaning)
+- **Unique blocks**: 575,061
+- **Ground truth**: 16,838 anomalous blocks (2.93%)
 
-### Performance Progression
+### Performance progression (in-sample)
 
-| Model Phase | Precision | Recall | F1 Score | Notes |
+Every model is scored on all 575,061 blocks, the same blocks it was fitted on (`data/evaluation/*_metrics.json`).
+
+| Model | Precision | Recall | F1 | Notes |
 |---|---|---|---|---|
-| Baseline Isolation Forest | 0.812 | 0.745 | 0.777 | Default sklearn params |
-| Hand-tuned Model | 0.864 | 0.810 | 0.836 | 15 selected features |
-| GA-Optimized Model | **0.932** | **0.918** | **0.925** | Evolved chromosome |
+| V1 baseline Isolation Forest | 0.0656 | 0.6514 | 0.1191 | Default sklearn settings, all 7 features |
+| **V2 GA-optimized (deployed)** | **0.6037** | **0.4705** | **0.5288** | 3 of 7 features, 150 trees, contamination 0.0235 |
+| V3 GA-optimized | 0.7069 | 0.4666 | 0.5622 | Promoted 9 Sep, rolled back to V2 by hand the same day |
 
-The GA optimization improved F1 score by **+14.8%** over baseline while reducing feature dimensionality by 35%.
+### Held-out performance
+
+`scripts/evaluate_holdout.py` refits each version's hyperparameters on a stratified 70% split and scores the unseen 30% (`data/evaluation/holdout_comparison.json`). The local run uses a 150,000-block stratified sample of complete blocks (4,392 anomalies), not all 575,061 blocks.
+
+| Model | Train F1 | Test F1 | Test F1 over 5 splits |
+|---|---|---|---|
+| V1 | 0.1692 | 0.1680 | 0.169 ± 0.008 |
+| **V2 (deployed)** | 0.5616 | **0.5708** | **0.575 ± 0.013** |
+| V3 | 0.5662 | 0.5760 | 0.564 ± 0.007 |
+
+The GA improves F1 over the baseline 4.4x in-sample (0.1191 to 0.5288) and 3.4x held out (0.169 to 0.575), while using 3 of the 7 features. Train and test F1 are level, so the model does not overfit. V2 and V3 are tied on unseen data. Why V3 was rolled back and V2 kept is recorded in `data/evaluation/v1_v2_v3_comparison.md`.
 
 ---
 
@@ -189,7 +200,7 @@ The diagram shows Smart Storage after the anomaly-score step, the Kafka streamin
 
 That is 1,745,197 of 5,587,093 lines kept. Full (HOT-only) retention is 0.9356 and coverage (HOT + WARM) is 0.9996.
 
-**Limitation.** WARM holds 74.9% of held-out blocks, but 99.98% of them keep exactly one line. That is the same cost as COLD, with partial credit. Because WARM credit does not depend on summary size, the GA learns the smallest summary fraction that still rounds to one line.
+**Fixed since these numbers.** The table above used the old rule: WARM held 74.9% of held-out blocks, and 99.98% of them kept exactly one line, the cost of COLD but with a flat 0.5 credit. WARM now keeps one metadata line plus `round(f x lines)` summary lines, and a WARM anomaly earns `0.5 x min(1, summary_lines / (0.25 x lines))`. On a 150,000-block sample the GA then saves 68.42% with full retention 0.9504, weighted 0.9517 and coverage 0.9668, and still beats every baseline. The full-dataset rerun is pending.
 
 ---
 
@@ -199,25 +210,25 @@ That is 1,745,197 of 5,587,093 lines kept. Full (HOT-only) retention is 0.9356 a
 - **Features:** for k ∈ {3, 5, 10, 20}, features are built from each block's first k events only, in one chunked pass over the cleaned log. The pass covered 11,173,511 rows and 575,061 blocks in 23.3 s, with 0 rows out of time order.
 - **Model:** one Isolation Forest per k, fitted on a stratified 70% training split (402,542 blocks, 11,787 anomalies). A GA tunes its alert threshold for F1 on that training split.
 - **Evaluation:** the untouched 30% test split (172,519 blocks, 5,051 anomalies).
-- **Lead time:** the fraction of a block's events not yet seen when the alert fires.
+- **Lead time:** the fraction of a block's events not yet seen when the alert fires, and the log-time seconds from the alert to the block's last line. Lead in seconds is log time from the alert (the k-th event) to the block's last log line (`lead_time_seconds` in the report). In HDFS a block's last line is often a much later read or delete, so this is time before the block's last line, not time before anyone would notice a problem.
 
 **Results on test blocks** (`data/evaluation/early_warning_report.json`):
 
-| k | Alert quantile | Precision | Recall | F1 | False-alarm rate | Mean lead, true alerts | Expected lead per alert |
-|---|---|---|---|---|---|---|---|
-| 3 | 0.9698 | 0.1834 | 0.1966 | 0.1898 | 2.64% | 0.067 | 0.012 |
-| 5 | 0.9874 | 0.8833 | 0.3671 | 0.5186 | 0.15% | 0.012 | 0.011 |
-| 10 | 0.9867 | 0.8812 | 0.3979 | 0.5483 | 0.16% | 0.049 | 0.043 |
-| 20 | 0.9801 | 0.8490 | 0.5722 | 0.6836 | 0.31% | 0.124 | 0.105 |
+| k | Alert quantile | Precision | Recall | F1 | False-alarm rate | Mean lead, true alerts | Expected lead per alert | Mean lead, seconds | Median lead, seconds |
+|---|---|---|---|---|---|---|---|---|---|
+| 3 | 0.9698 | 0.1834 | 0.1966 | 0.1898 | 2.64% | 0.067 | 0.012 | 1,734 s | 0 s |
+| 5 | 0.9874 | 0.8833 | 0.3671 | 0.5186 | 0.15% | 0.012 | 0.011 | 283 s | 0 s |
+| 10 | 0.9867 | 0.8812 | 0.3979 | 0.5483 | 0.16% | 0.049 | 0.043 | 1,592 s | 0 s |
+| 20 | 0.9801 | 0.8490 | 0.5722 | 0.6836 | 0.31% | 0.124 | 0.105 | 5,165 s (1.4 h) | 0 s |
 
 **Results on blocks still running when the alert fires** (more than k events):
 
-| k | Blocks | Anomalies | Precision | Recall | F1 | Mean lead |
-|---|---|---|---|---|---|---|
-| 3 | 171,604 | 4,136 | 0.0189 | 0.0206 | 0.0197 | 0.779 |
-| 5 | 170,693 | 3,225 | 0.1026 | 0.0087 | 0.0160 | 0.797 |
-| 10 | 170,689 | 3,221 | 0.3991 | 0.0559 | 0.0980 | 0.551 |
-| 20 | 42,339 | 2,009 | 0.6961 | 0.5266 | 0.5996 | 0.339 |
+| k | Blocks | Anomalies | Precision | Recall | F1 | Mean lead | Mean lead, seconds | Median lead, seconds |
+|---|---|---|---|---|---|---|---|---|
+| 3 | 171,604 | 4,136 | 0.0189 | 0.0206 | 0.0197 | 0.779 | 20,258 s (5.6 h) | 8,908 s (2.5 h) |
+| 5 | 170,693 | 3,225 | 0.1026 | 0.0087 | 0.0160 | 0.797 | 18,709 s (5.2 h) | 8,138 s (2.3 h) |
+| 10 | 170,689 | 3,221 | 0.3991 | 0.0559 | 0.0980 | 0.551 | 17,776 s (4.9 h) | 8,062 s (2.2 h) |
+| 20 | 42,339 | 2,009 | 0.6961 | 0.5266 | 0.5996 | 0.339 | 14,110 s (3.9 h) | 10,466 s (2.9 h) |
 
 **Trade-off.** The Pareto front on precision versus mean lead time is k = 5, 10 and 20. The best trade-off is **k = 20**, on both views. At small k, the headline precision comes from short anomalous blocks that have already ended; only k = 20 warns early on blocks still in progress.
 
@@ -233,6 +244,23 @@ That is 1,745,197 of 5,587,093 lines kept. Full (HOT-only) retention is 0.9356 a
   - Alerts are published to `alerts` and saved to the MongoDB collection `stream_alerts`. Decisions are published to `storage.decisions`.
 - **API:** `GET /api/stream/status` serves live counters (events/sec, blocks in flight, alert counts, storage saved so far) and `GET /api/stream/alerts` serves the alerts. The dashboard's Live Stream page polls both.
 - **Setup:** `docs/streaming_guide.md` has the exact start-up commands.
+
+**Verification replay (B3).** The first 1,000,000 HDFS lines (about 3.5 hours of log time) were replayed at full speed, run id `b3-1m`. `scripts/analyze_stream_run.py` read every decision and alert back from Kafka and joined them with `anomaly_label.csv`. A block counts as **complete** only if all of its lines in the full `HDFS.log` fell inside the replay (`data/evaluation/stream_run_report.json`).
+
+| Blocks (66,167 decided) | Blocks | Anomaly share | Block-anomaly precision | Recall | False-alarm rate |
+|---|---:|---:|---:|---:|---:|
+| Complete | 2,528 | 51.5% | **0.986** | **0.934** | **1.39%** |
+| Cut off | 63,639 | 2.6% | 0.049 | 0.180 | 9.31% |
+
+| Early warning (k = 20) | Blocks reaching 20 events | Alerts | True | Precision | Recall | False-alarm rate |
+|---|---:|---:|---:|---:|---:|---:|
+| Complete blocks | 88 | 22 | 21 | **0.955** | 0.247 | — (3 normal blocks) |
+| Cut-off blocks | 1,560 | 142 | 131 | **0.923** | 0.784 | 0.79% |
+
+- **Lead time on complete blocks:** a true early warning fired with a median 28.6% of the block still to come, a median 285 s (4.8 min) before the block's last line. For cut-off blocks the end is outside the replay; the median of 1,758 s to the last line *seen* is only a lower bound.
+- **Complete blocks are mostly anomalous** (51.5% against 2.9% overall), because failing blocks end early. That inflates precision, so the false-alarm rate (1.39% of complete normal blocks; batch V2 is 0.93%) is the fairer number.
+- **The whole-block verdict is unreliable on partial blocks.** That covers 6,071 of 7,303 block-anomaly alerts, nearly all of them false. Early warning does not have this problem: it only scores a block's first 20 events, which a partial block has.
+- **The 1-hour idle timeout is too short for HDFS.** 34,321 of the 36,279 blocks finalized by timeout had more lines later, because HDFS blocks routinely go quiet for hours between write and read or delete. Those blocks look truncated, and timeout-finalized blocks give block-anomaly precision of 0.145 (929 of 6,396).
 
 ---
 
