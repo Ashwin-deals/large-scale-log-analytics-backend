@@ -18,8 +18,8 @@ this script before rehearsing.
 |---|---|---|---|
 | 0:00 | Dashboard | "MorphGuard reads system logs, groups them into blocks and flags unusual ones with an Isolation Forest. A genetic algorithm keeps tuning it." | KPIs, Model Status (real state), blocks-and-anomalies chart |
 | 0:40 | Detection Results | "Each row is one block. Analysts can confirm or reject an alert, and the next retrain learns from it." | Click **Real** on a top row; mention Export CSV |
-| 1:20 | Models | "A new model replaces the live one only if its F1 is higher. V3 was promoted, then rolled back by hand; the log records it. On unseen data V2 and V3 are tied, 0.575 vs 0.564." | Lineage, Held-out Evaluation card, Autoencoder table |
-| 2:10 | Smart Storage | "The GA also learns what to keep. On held-out blocks it saves about two-thirds of the lines and still keeps 95% of anomalies, and beats every simple rule." | KPIs, baselines chart, move one slider |
+| 1:20 | Models | "A new model replaces the live one only if its F1 is higher. V3 was promoted, then rolled back by hand; the log records it. On unseen data V3 is actually better, 0.555 vs 0.528, and that decision is the team's." | Lineage, Held-out Evaluation card, Autoencoder table |
+| 2:10 | Smart Storage | "The GA also learns what to keep. On held-out blocks it saves two-thirds of the lines, keeps 94% of anomalies in full, and beats every simple rule." | KPIs, baselines chart, move one slider |
 | 3:00 | Log source → OpenStack, then Django | "All five sources run through the same pipeline. Each page says what kind of labels it has: OpenStack is a case study (it catches 0 of the 4 documented faulty instances), Django is synthetic." | Source badge, OpenStack caught-0-of-4, Django dashboard |
 | 3:50 | Live Stream | "The same models run live on Kafka." | Start processor + producer; alerts arrive |
 | 4:40 | Close | "Limitations we are upfront about: the labels behind the extra sources, storage measured in lines not bytes, and early warning that is only truly early at k = 20." | |
@@ -32,12 +32,12 @@ Data: 575,061 blocks, 2.93% anomalous.
 
 | | In-sample F1 | Held-out F1 (5 splits) |
 |---|---|---|
-| V1 baseline | 0.1191 | 0.169 |
-| **V2 GA-optimized** | **0.5288** | **0.575 ± 0.013** |
-| V3 (rolled back) | 0.5622 | 0.564 ± 0.007 |
+| V1 baseline | 0.1191 | 0.128 ± 0.008 |
+| **V2 GA-optimized (live)** | **0.5288** | **0.528 ± 0.014** |
+| V3 (rolled back) | 0.5622 | 0.555 ± 0.009 (best on all 5 splits) |
 
-V2 uses 3 of 7 features, 150 trees and contamination 0.0235. Held-out numbers come from a 150,000-block
-stratified sample (`holdout_comparison.json`).
+V2 uses 3 of 7 features, 150 trees and contamination 0.0235. Held-out: refit on 70% of all 575,061 blocks,
+scored on the unseen 30% (`holdout_comparison.json`).
 
 ### Autoencoder vs Isolation Forest
 
@@ -45,15 +45,16 @@ Same held-out splits, same alert rate (`autoencoder_comparison.json`).
 
 | Detector | Test F1 | ROC AUC |
 |---|---|---|
-| Isolation Forest | 0.575 | 0.941 |
-| Autoencoder, V2's 3 features | 0.509 | 0.750 |
-| Autoencoder, all 7 features | 0.400 | 0.800 |
+| Isolation Forest | 0.528 ± 0.014 | 0.895 |
+| Autoencoder, V2's 3 features | 0.518 ± 0.137 | 0.754 |
+| Autoencoder, all 7 features | 0.292 ± 0.153 | 0.801 |
 
 ### Smart Storage on HDFS
 
-The figures are held-out, after the WARM fix, on the 150k sample:
-- 68.4% of lines saved
-- full retention 0.950, weighted 0.952
+Held-out half of all blocks, after the WARM fix:
+- 66.4% of lines saved
+- 0.942 of anomalies kept in full; weighted retention 0.948, just under the 0.95 target (the tuning half meets it)
+- WARM summaries keep 11 of a block's 23 lines on average
 - beats every baseline
 
 ### Early warning on HDFS
@@ -68,9 +69,9 @@ Held-out test sets. The labels are not ground truth.
 
 | Source | Labels | V1 F1 | GA F1 | Caught | Lines saved |
 |---|---|---|---|---|---|
-| OpenStack | by run | 0.111 | 0.138 | 12 of 59 | 31.4% |
+| OpenStack | by run | 0.111 | 0.138 | 12 of 59 | 22.3% |
 | Apache | injected | 0.301 | 0.607 | 44 of 74 | 23.3% |
-| CloudTrail | weak rules | 0.115 | 0.615 | 155 of 211 | 11.8% |
+| CloudTrail | weak rules | 0.115 | 0.615 | 155 of 211 | 11.1% |
 | Django | synthetic | 0.158 | 0.436 | 17 of 24 | 71.0% |
 
 ### Stream verification
@@ -83,32 +84,34 @@ A replay of 1,000,000 HDFS lines:
 ## Likely questions
 
 **Why Isolation Forest and not a neural network?**
-We tested an Autoencoder on the same held-out splits. Isolation Forest scores F1 0.575 against the
-Autoencoder's best of 0.509, with AUC 0.94 against 0.75–0.80. It is far more stable across splits
-(±0.013 against ±0.100) and fits faster. It also needs no labels, which matters with only 2.9% anomalies.
+We tested an Autoencoder on the same five held-out splits of all blocks. With V2's three features it
+averages about the same F1 (0.518 against 0.528), but it swings ten times as much from split to split
+(±0.137 against ±0.014) and ranks anomalies clearly worse (AUC 0.754 against 0.895). With all seven
+features it drops to 0.292. Isolation Forest also needs no labels and no feature scaling.
 
-**Why is F1 only about 0.58?**
+**Why is F1 only about 0.53?**
 It is unsupervised: the model never sees the labels. At a 2.35% alert rate it catches about half the
 anomalies, and two in three of its alerts are real. A supervised model would score higher, but it needs
 labels that a live system does not have.
 
 **Your published F1 is in-sample. Isn't that cheating?**
-We report both. On unseen blocks, test F1 equals train F1 (0.575), so there is no overfitting.
+We report both. On unseen blocks test F1 matches train F1 (0.522 against 0.526 for V2), so there is no overfitting.
 
 **Why was V3 rolled back if it scored higher?**
-It was a manual override, recorded in the history log. On unseen data, V2 and V3 are tied. Smart Storage,
-Early Warning and streaming are tuned on V2. *The reason for the rollback itself is still being confirmed
-by the team.*
+It was a manual override, recorded in the history log, and on unseen data V3 really is better (0.555 against
+0.528, on all five splits). V2 stays live for now because Smart Storage, Early Warning and streaming were
+tuned on it; re-promoting V3 is a team decision. *The reason for the rollback itself is still being
+confirmed by the team.*
 
 **How do you avoid promoting a lucky model?**
 Promotion needs strictly higher F1, and every decision is logged. For non-HDFS sources the candidate and
 the incumbent are scored on the same held-out split. Analyst feedback re-scores the incumbent on the
 corrected labels before the comparison.
 
-**Smart Storage says 95% of anomalies are kept. How can a summary keep an anomaly?**
+**How can a summary "keep" an anomaly?**
 A WARM summary only counts in proportion to how much of the block it keeps, with full credit at 25% of the
-block. The 95% target is met by fully kept anomalies: full retention is 0.950. Savings are counted in log
-lines, not bytes.
+block. Almost all retention now comes from fully kept anomalies (0.942); weighted retention is 0.948, just
+under the 0.95 target on unseen blocks. Savings are counted in log lines, not bytes.
 
 **Is early warning really early?**
 Only at k = 20. At smaller k, the precision comes from short blocks that had already ended. Three

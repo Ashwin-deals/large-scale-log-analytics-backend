@@ -75,8 +75,9 @@ python3 scripts/optimize_storage_policy.py   # writes data/storage/policy_best.j
 ```
 
 Held-out result (`data/storage/storage_report.json`, 287,531 blocks):
-- **Storage:** 68.76% of log lines saved (1,745,197 of 5,587,093 kept).
-- **Retention:** weighted anomaly retention 0.9676 against a 0.95 target; 0.9356 of anomalies kept in full.
+- **Storage:** 66.41% of log lines saved (1,876,775 of 5,587,093 kept).
+- **Retention:** 0.942 of anomalies kept in full; weighted retention 0.948, just under the 0.95 target on unseen blocks (the tuning half meets it).
+- **WARM tier:** summaries keep 11 of a block's 23 lines on average (a real middle tier since the WARM credit fix).
 - **Baselines:** it beats keep-all, keep-flagged-only, tuned top-k% and random sampling at the same saving.
 
 API: `GET /api/storage/summary`, `GET /api/storage/policy`, `POST /api/storage/simulate`.

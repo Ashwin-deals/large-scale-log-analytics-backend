@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-12T12:49:30+0530",
+  "generated_at": "2026-11-14T00:00:28+0530",
   "model": {
     "kind": "tune_half_refit",
     "model_path": "data/storage/openstack/isolation_forest_tune_half.pkl",
@@ -8,16 +8,16 @@
   },
   "policy": {
     "weights": {
-      "anomaly_score": 0.04040718561525823,
-      "event_frequency": 0.6244446766013269,
-      "block_size": 0.3351481377834149
+      "anomaly_score": 0.18931396832172812,
+      "event_frequency": 0.2733809257531152,
+      "block_size": 0.5373051059251567
     },
     "error_weight": 0.2,
     "thresholds": {
-      "hot": 0.5872111453599953,
-      "warm": 0.24763434915015498
+      "hot": 0.41698464657469947,
+      "warm": 0.35568039585750866
     },
-    "summary_fraction": 0.0295620409562381
+    "summary_fraction": 0.034671268214983085
   },
   "normalizer": {
     "score_min": -0.1005906133043753,
@@ -1031,8 +1031,10 @@
   "retention_target": 0.95,
   "penalty_weight": 1000.0,
   "warm_credit": 0.5,
+  "warm_ref_fraction": 0.25,
   "split": {
     "test_size": 0.5,
-    "seed": 42
+    "seed": 42,
+    "protocol": "holdout"
   }
 }
