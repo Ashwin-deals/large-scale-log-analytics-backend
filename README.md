@@ -74,10 +74,10 @@ model refitted on the tuning half only.
 python3 scripts/optimize_storage_policy.py   # writes data/storage/policy_best.json + storage_report.json
 ```
 
-Held-out result (`data/storage/storage_report.json`, 287,531 blocks):
-- **Storage:** 66.41% of log lines saved (1,876,775 of 5,587,093 kept).
-- **Retention:** 0.942 of anomalies kept in full; weighted retention 0.948, just under the 0.95 target on unseen blocks (the tuning half meets it).
-- **WARM tier:** summaries keep 11 of a block's 23 lines on average (a real middle tier since the WARM credit fix).
+Held-out result (`data/storage/storage_report.json`, 287,531 blocks, scored by V3):
+- **Storage:** 68.71% of log lines saved (1,747,980 of 5,587,093 kept).
+- **Retention:** 0.953 of anomalies kept in full; weighted retention 0.955, which meets the 0.95 target on unseen blocks.
+- **WARM tier:** a small middle tier: 9.5% of blocks, keeping about 2 of a block's 23.5 lines. Almost all retention comes from HOT.
 - **Baselines:** it beats keep-all, keep-flagged-only, tuned top-k% and random sampling at the same saving.
 
 API: `GET /api/storage/summary`, `GET /api/storage/policy`, `POST /api/storage/simulate`.
@@ -114,7 +114,7 @@ API: `GET /api/stream/status`, `GET /api/stream/alerts`. Full walkthrough: `docs
 ## OpenStack Source
 OpenStack nova logs from LogHub are a second labeled source. Each instance-id session is a block, labeled
 by the file it came from (198 of 2,069 sessions come from the abnormal run). The source has its own
-models and metrics under `data/models/openstack/` and `data/evaluation/openstack_*`; the HDFS V2 model is
+models and metrics under `data/models/openstack/` and `data/evaluation/openstack_*`; the HDFS models are
 untouched.
 
 ```bash
