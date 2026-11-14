@@ -112,6 +112,7 @@ def record_rollback(
     update_current: bool = True,
     extra: dict | None = None,
     from_version: int | None = None,
+    event: str = "rollback",
 ) -> dict:
     """A human override of promote-if-better: point the deployment back at an
     earlier version and log it, so the history never jumps between versions
@@ -133,7 +134,7 @@ def record_rollback(
         _write_current_version(current_version_path, to_version, model_path, metrics_path, metric, metric_value, timestamp)
     entry = {
         "timestamp": timestamp,
-        "event": "rollback",
+        "event": event,
         "metric": metric,
         "promoted": False,
         "from_version": from_version,
@@ -145,6 +146,13 @@ def record_rollback(
     _append_version_history(version_history_path, entry)
     return entry
 
+
+
+def record_manual_promotion(to_version: int, reason: str, **kwargs) -> dict:
+    """The opposite override: put a version back live by hand, for example one
+    that was rolled back without a recorded reason but wins on held-out data.
+    Logged as its own event so the history never calls it a rollback."""
+    return record_rollback(to_version, reason, event="manual_promotion", **kwargs)
 
 def _append_version_history(version_history_path: Path, entry: dict) -> None:
     history = []

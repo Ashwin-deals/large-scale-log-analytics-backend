@@ -514,6 +514,9 @@ def dashboard():
         elif entry.get("event") == "rollback":
             text = f"Model **rolled back** by hand from V{entry['from_version']} to V{entry['to_version']}"
             kind = "rollback"
+        elif entry.get("event") == "manual_promotion":
+            text = f"Model **re-promoted** by hand from V{entry['from_version']} to V{entry['to_version']}"
+            kind = "promotion"
         elif entry["promoted"]:
             text = (
                 f"Candidate **promoted** to V{entry['new_version']} ({entry['metric']}: "
@@ -765,6 +768,17 @@ def _timeline_from_history(history: list[dict]) -> list[dict]:
                     "desc": entry.get("reason") or "Manual rollback.",
                 }
             )
+        elif entry.get("event") == "manual_promotion":
+            # Also a human override; primary, not success, so the Models page
+            # doesn't read it as the outcome of a retrain cycle.
+            timeline.append(
+                {
+                    "tone": "primary",
+                    "title": f"Re-promoted by hand: V{entry['from_version']} -> V{entry['to_version']}",
+                    "meta": entry["timestamp"],
+                    "desc": entry.get("reason") or "Manual promotion.",
+                }
+            )
         elif entry["promoted"]:
             timeline.append(
                 {
@@ -854,6 +868,16 @@ def models():
     )
 
 
+def _holdout_warnings(holdout: dict, ctx) -> list[str]:
+    warnings = []
+    if holdout["data"]["blocks"] < 575_061:
+        warnings.append(f"Held-out numbers come from a {holdout['data']['blocks']:,}-block sample.")
+    live = resolve_current_deployment(ctx)["version"]
+    if holdout.get("deployed_version") != live:
+        warnings.append(f"These numbers were computed while V{holdout.get('deployed_version')} was live; V{live} is live now. "
+                        "Rerun scripts/evaluate_holdout.py and scripts/compare_autoencoder.py.")
+    return warnings
+
 def _source_evaluation(ctx: SourceContext, report: dict | None) -> dict | None:
     """Per-source held-out test metrics, plus every caveat that limits what
     they mean. OpenStack also gets the second label view: how many of the
@@ -877,9 +901,9 @@ def _source_evaluation(ctx: SourceContext, report: dict | None) -> dict | None:
             "test_blocks": holdout["split"]["test"]["blocks"],
             "test_anomalies": holdout["split"]["test"]["anomalies"],
             "deployed_test_f1": deployed.get("refit_test", {}).get("f1"),
+            "deployed_version": holdout["deployed_version"],
             "stability": holdout.get("stability_across_splits"),
-            "warnings": [] if holdout["data"]["blocks"] >= 575_061 else
-                        [f"Held-out numbers come from a {holdout['data']['blocks']:,}-block sample."],
+            "warnings": _holdout_warnings(holdout, ctx),
         }
     models_section = report.get("models", {})
     return {
