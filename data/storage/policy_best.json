@@ -1,42 +1,41 @@
 {
-  "generated_at": "2026-11-14T00:04:45+0530",
+  "generated_at": "2026-11-14T23:26:13+0530",
   "model": {
     "kind": "tune_half_refit",
-    "version": 2,
+    "version": 3,
     "model_path": "data/storage/isolation_forest_tune_half.pkl",
-    "hyperparameters_from": "data/models/isolation_forest_v2.pkl",
+    "hyperparameters_from": "data/models/isolation_forest_v3.pkl",
     "hyperparameters": {
       "bootstrap": false,
-      "contamination": 0.02347061968879934,
-      "max_features": 0.7962072844310213,
-      "max_samples": 0.7273078084478353,
-      "n_estimators": 150,
-      "random_state": 42,
+      "contamination": 0.020867158699028138,
+      "max_features": 0.5953955400398291,
+      "max_samples": 0.1345893626256359,
+      "n_estimators": 75,
+      "random_state": 1951368095,
       "warm_start": false
     },
     "features": [
-      "component_encoded",
-      "event_frequency",
-      "destination_ip_encoded"
+      "block_size",
+      "event_frequency"
     ],
     "fitted_on": "tune half only (287,530 blocks)"
   },
   "policy": {
     "weights": {
-      "anomaly_score": 0.9163072489803897,
-      "event_frequency": 0.05575648350506988,
-      "block_size": 0.02793626751454039
+      "anomaly_score": 0.8124092597383151,
+      "event_frequency": 0.11840168183690516,
+      "block_size": 0.06918905842477975
     },
     "error_weight": 0.2,
     "thresholds": {
-      "hot": 0.11895140528239999,
-      "warm": 0.11633854118218445
+      "hot": 0.1258963462633298,
+      "warm": 0.11753876488469649
     },
-    "summary_fraction": 0.4166619333619103
+    "summary_fraction": 0.04856230258667964
   },
   "normalizer": {
-    "score_min": -0.11421340462994328,
-    "score_max": 0.23365641779688262,
+    "score_min": -0.10187018416092142,
+    "score_max": 0.3407587643488986,
     "log_freq_min": 1.0986122886681098,
     "log_freq_max": 5.700443573390687,
     "size_quantiles": [

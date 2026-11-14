@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-14T00:05:07+0530",
+  "generated_at": "2026-11-14T23:26:53+0530",
   "protocol": "Each version's hyperparameters and features are refitted (sklearn clone) on the stratified training split only and scored on the held-out split. 'published_model_on_test_rows_in_sample' scores the saved pickle, which was fitted on every block, on the same rows -- in-sample, for reference.",
   "data": {
     "features_path": "data/features/features.csv",
@@ -19,7 +19,7 @@
       "anomalies": 5051
     }
   },
-  "deployed_version": 2,
+  "deployed_version": 3,
   "versions": {
     "V1": {
       "deployed": false,
@@ -70,10 +70,10 @@
         "false_positives": 46920,
         "missed": 1757
       },
-      "fit_seconds": 2.49
+      "fit_seconds": 2.32
     },
     "V2": {
-      "deployed": true,
+      "deployed": false,
       "features": [
         "component_encoded",
         "event_frequency",
@@ -120,7 +120,7 @@
       "fit_seconds": 5.24
     },
     "V3": {
-      "deployed": false,
+      "deployed": true,
       "features": [
         "block_size",
         "event_frequency"
@@ -163,7 +163,7 @@
         "false_positives": 977,
         "missed": 2710
       },
-      "fit_seconds": 2.37
+      "fit_seconds": 2.64
     }
   },
   "stability_across_splits": {
