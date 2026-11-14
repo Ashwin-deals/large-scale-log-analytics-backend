@@ -1,9 +1,8 @@
 {
-  "version": 2,
-  "model_path": "data/models/isolation_forest_v2.pkl",
-  "metrics_path": "data/evaluation/isolation_forest_v2_metrics.json",
+  "version": 3,
+  "model_path": "data/models/isolation_forest_v3.pkl",
+  "metrics_path": "data/evaluation/isolation_forest_v3_metrics.json",
   "metric": "f1",
-  "metric_value": 0.5288384512683578,
-  "promoted_at": "2026-09-09T04:40:48.924857+00:00",
-  "note": "Manually rolled back from V3 to V2."
+  "metric_value": 0.5621780194619348,
+  "promoted_at": "2026-11-14T17:54:52.193886+00:00"
 }

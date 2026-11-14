@@ -122,12 +122,12 @@ Smart Storage sits after the anomaly-score step. Each block gets an importance s
 - **Fitness:** storage saved, minus a penalty when weighted anomaly retention falls below the target. Weighted retention counts HOT = 1, COLD = 0, and each WARM anomaly earns `warm_credit x min(1, summary_lines / (warm_ref_fraction x event_frequency))`: full credit (default 0.5) only when the summary keeps at least `warm_ref_fraction` (default 0.25) of the block, proportionally less below that.
 - **Clean evaluation:** the deployed model's hyperparameters are refitted on a stratified tune half, so the held-out half is scored by a model that never saw it.
 
-Results (`data/storage/storage_report.json`, all 575,061 blocks, fixed WARM rule):
+Results (`data/storage/storage_report.json`, all 575,061 blocks, fixed WARM rule, scored by V3):
 - **Split:** 287,530 tuning blocks and 287,531 held-out blocks, each with 8,419 anomalies.
-- **Learned policy:** weights 0.916 (anomaly score), 0.056 (event frequency) and 0.028 (block size); HOT threshold 0.1190; WARM threshold 0.1163; summary fraction 0.417.
-- **On the held-out half:** it keeps 1,876,775 of 5,587,093 lines, saving **66.41%**. Full (HOT-only) retention is 0.942, weighted retention **0.948** (0.2 points under the 0.95 target, which the tuning half meets), coverage 0.955.
+- **Learned policy:** weights 0.812 (anomaly score), 0.118 (event frequency) and 0.069 (block size); HOT threshold 0.1259; WARM threshold 0.1175; summary fraction 0.049.
+- **On the held-out half:** it keeps 1,747,980 of 5,587,093 lines, saving **68.71%**. Full (HOT-only) retention is 0.953, weighted retention **0.955** (meets the 0.95 target), coverage 0.978.
 - **Comparison:** it beats every baseline on the same penalised fitness.
-- **Fixed: WARM tier collapse.** Under the old rule (WARM cost `max(1, round(f x lines))`, flat credit), WARM held 74.9% of held-out blocks and 99.98% of them kept exactly one line: the COLD cost, but with free credit. Charging the metadata line separately and making credit proportional to the summary removes that free credit. On all blocks, COLD is a real tier again (74% of held-out blocks), WARM is a real summary tier (3.6% of blocks, 11 of 23 lines kept on average), and nearly all retention comes from fully kept anomalies (0.942).
+- **Fixed: WARM tier collapse.** Under the old rule (WARM cost `max(1, round(f x lines))`, flat credit), WARM held 74.9% of held-out blocks and 99.98% of them kept exactly one line: the COLD cost, but with free credit. Charging the metadata line separately and making credit proportional to the summary removes that free credit. On all blocks, COLD is a real tier again (68% of held-out blocks), no WARM block is reduced to the one-line COLD cost, and nearly all retention comes from fully kept anomalies (0.953). Under V3 WARM is small: 9.5% of blocks, keeping about 2 of 23.5 lines each.
 
 ### 3.7 Early Warning (`early_warning/`, `early_warning_api.py`)
 Early warning flags a block from its first k events, for k in {3, 5, 10, 20}.

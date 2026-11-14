@@ -3,16 +3,17 @@
 Answers "why Isolation Forest?" with numbers instead of an argument. Both
 detectors are unsupervised and see the same blocks:
 
-  Isolation Forest   the deployed V2 settings (features, trees, contamination),
+  Isolation Forest   the deployed model's settings (features, trees, contamination),
                      refitted on the training split
   Autoencoder        a dense autoencoder (sklearn MLPRegressor trained to
                      reproduce its input, bottleneck layer) on standardized
                      features (StandardScaler fitted on the training split);
                      anomaly score = reconstruction error
 
-Two feature sets for the autoencoder: V2's 3 features, and all 7. Each
-detector is scored at the same alert rate as V2 (its contamination: the top
-2.35% of training scores) so the comparison is like for like, and also at the
+Two feature sets for the autoencoder: the deployed model's features, and all 7.
+Each detector is scored at the same alert rate as the deployed model (the top
+share of training scores given by its contamination) so the comparison is like
+for like, and also at the
 threshold that maximizes F1 on the training split (labels used for the
 threshold only, never for fitting). Repeated over several random splits.
 
@@ -114,13 +115,14 @@ def main():
 
     deployed = json.loads(DEPLOYED_PATH.read_text())
     template = joblib.load(deployed["model_path"])
-    v2_features = list(template.feature_names_in_)
+    deployed_features = list(template.feature_names_in_)
+    tag = f"V{deployed['version']}"
     alert_rate = float(template.contamination)
 
     merged = load_labeled_features().reset_index(drop=True)
     labels = merged["Label"].to_numpy()
     y = labels == POSITIVE
-    print(f"{len(merged):,} blocks ({y.sum():,} anomalies); deployed V{deployed['version']} features {v2_features}, "
+    print(f"{len(merged):,} blocks ({y.sum():,} anomalies); deployed V{deployed['version']} features {deployed_features}, "
           f"alert rate {alert_rate:.4f}; seeds {args.seeds}")
 
     runs = []
@@ -130,12 +132,12 @@ def main():
         results = []
 
         start = time.perf_counter()
-        forest = clone(template).fit(train[v2_features])
-        results.append(evaluate("Isolation Forest (V2 settings)", -forest.score_samples(train[v2_features]),
-                                -forest.score_samples(test[v2_features]), y[tr], y[te], alert_rate,
+        forest = clone(template).fit(train[deployed_features])
+        results.append(evaluate(f"Isolation Forest ({tag} settings)", -forest.score_samples(train[deployed_features]),
+                                -forest.score_samples(test[deployed_features]), y[tr], y[te], alert_rate,
                                 time.perf_counter() - start))
 
-        for label, columns in (("V2's 3 features", v2_features), ("all 7 features", list(TRAINING_FEATURE_COLUMNS))):
+        for label, columns in ((f"{tag}'s {len(deployed_features)} features", deployed_features), ("all 7 features", list(TRAINING_FEATURE_COLUMNS))):
             start = time.perf_counter()
             auto = Autoencoder(len(columns), seed).fit(train[columns].to_numpy(dtype=float))
             results.append(evaluate(f"Autoencoder ({label})", auto.score(train[columns].to_numpy(dtype=float)),

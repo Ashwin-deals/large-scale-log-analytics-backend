@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from optimization.model_evolution import evaluate_and_promote, record_rollback
+from optimization.model_evolution import evaluate_and_promote, record_manual_promotion, record_rollback
 
 
 class ModelEvolutionTest(unittest.TestCase):
@@ -101,6 +101,28 @@ class ModelEvolutionTest(unittest.TestCase):
             self.assertEqual(json.loads(paths["current_version_path"].read_text())["model_path"], "x")
             self.assertEqual(self._read_history(paths["version_history_path"])[0]["timestamp"], "2026-09-09T04:40:48+00:00")
 
+    def test_manual_promotion_puts_a_rolled_back_version_live_again(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._build_paths(directory)
+            self._write_model(paths["current_model"])
+            self._write_model(paths["candidate_model"])
+            self._write_metrics(paths["current_metrics"], f1=0.20)
+            self._write_metrics(paths["candidate_metrics"], f1=0.70)
+            self._evaluate_and_promote(paths)  # V2
+            self._write_model(paths["models_dir"] / "isolation_forest_v1.pkl")
+            self._write_metrics(paths["evaluation_dir"] / "isolation_forest_v1_metrics.json", f1=0.20)
+            record_rollback(1, "unknown", **self._rollback_paths(paths))
+
+            entry = record_manual_promotion(2, "wins held-out", **self._rollback_paths(paths))
+
+            self.assertEqual(json.loads(paths["current_version_path"].read_text())["version"], 2)
+            self.assertEqual((entry["event"], entry["from_version"], entry["to_version"]), ("manual_promotion", 1, 2))
+            self.assertEqual(entry["to_metric_value"], 0.70)
+            # The next retrain winner still gets a fresh number.
+            paths["candidate_model"].write_bytes(b"newer")
+            self._write_metrics(paths["candidate_metrics"], f1=0.90)
+            self.assertEqual(self._evaluate_and_promote(paths)["new_version"], 3)
+
     def test_rollback_to_a_missing_version_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             paths = self._build_paths(directory)
@@ -178,3 +200,28 @@ class ModelEvolutionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TimelineTest(unittest.TestCase):
+    def test_manual_promotion_is_its_own_timeline_entry(self):
+        import pipeline_api
+
+        history = [
+            {"timestamp": "t1", "event": "rollback", "metric": "f1", "promoted": False, "from_version": 3, "to_version": 2, "reason": "r1"},
+            {"timestamp": "t2", "event": "manual_promotion", "metric": "f1", "promoted": False, "from_version": 2, "to_version": 3, "reason": "r2"},
+        ]
+        newest = pipeline_api._timeline_from_history(history)[0]
+        self.assertEqual(newest["title"], "Re-promoted by hand: V2 -> V3")
+        self.assertEqual((newest["tone"], newest["desc"]), ("primary", "r2"))
+
+
+class HoldoutWarningTest(unittest.TestCase):
+    def test_warns_when_held_out_numbers_predate_the_live_model(self):
+        from unittest import mock
+
+        import pipeline_api
+
+        full = {"data": {"blocks": 575_061}, "deployed_version": 2}
+        with mock.patch.object(pipeline_api, "resolve_current_deployment", lambda ctx=None: {"version": 3}):
+            self.assertIn("V2 was live", pipeline_api._holdout_warnings(full, None)[0])
+            self.assertEqual(pipeline_api._holdout_warnings({**full, "deployed_version": 3}, None), [])

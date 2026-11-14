@@ -157,9 +157,19 @@
     "from_version": 3,
     "to_version": 2,
     "to_metric_value": 0.5288384512683578,
-    "reason": "Not recorded at the time; awaiting confirmation from the team. Manual override of promote-if-better, not a metric decision: V3 scored higher in-sample (F1 0.5622 vs 0.5288).",
+    "reason": "Not recorded; nobody on the team could recall a reason (checked 2026-11-14). Manual override of promote-if-better, not a metric decision: V3 scored higher in-sample (F1 0.5622 vs 0.5288).",
     "backfilled": true,
     "backfilled_at": "2026-11-13",
     "how_applied": "current_version.json edited by hand (its note: 'Manually rolled back from V3 to V2.'); committed in 28e14ea on 2026-10-25"
+  },
+  {
+    "timestamp": "2026-11-14T17:54:52.193886+00:00",
+    "event": "manual_promotion",
+    "metric": "f1",
+    "promoted": false,
+    "from_version": 2,
+    "to_version": 3,
+    "to_metric_value": 0.5621780194619348,
+    "reason": "Re-promoted by the team on 2026-11-14. The rollback to V2 had no recorded reason, and V3 beats V2 on held-out data: F1 0.555 vs 0.528 over 5 stratified 70/30 splits of all 575,061 blocks, best on every split (data/evaluation/holdout_comparison.json)."
   }
 ]

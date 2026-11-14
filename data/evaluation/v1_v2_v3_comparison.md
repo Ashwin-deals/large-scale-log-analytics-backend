@@ -1,7 +1,8 @@
 # HDFS model versions: V1, V2, V3
 
-V2 is the deployed model. V3 was promoted automatically on 9 Sep 2026 and
-rolled back to V2 by hand about nine hours later. This file records both
+V3 is the deployed model. It was promoted automatically on 9 Sep 2026,
+rolled back to V2 by hand about nine hours later, and re-promoted by the team
+on 14 Nov 2026 because it is better on unseen data. This file records both
 the published (in-sample) numbers and held-out numbers. It also records
 what is known about the rollback.
 
@@ -18,8 +19,8 @@ fitted on. These numbers are therefore training scores.
 | Version | Accuracy | Precision | Recall | F1 | Flagged | Caught | False alarms | Missed | State |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | V1 baseline | 0.7180 | 0.0656 | 0.6514 | 0.1191 | 167,283 | 10,968 | 156,315 | 5,870 | Retired |
-| V2 GA-optimized | 0.9755 | 0.6037 | 0.4705 | **0.5288** | 13,122 | 7,922 | 5,200 | 8,916 | **Deployed** |
-| V3 GA-optimized | 0.9787 | 0.7069 | 0.4666 | 0.5622 | 11,114 | 7,857 | 3,257 | 8,981 | Rolled back |
+| V2 GA-optimized | 0.9755 | 0.6037 | 0.4705 | 0.5288 | 13,122 | 7,922 | 5,200 | 8,916 | Retired |
+| V3 GA-optimized | 0.9787 | 0.7069 | 0.4666 | **0.5622** | 11,114 | 7,857 | 3,257 | 8,981 | **Deployed** (re-promoted 14 Nov) |
 
 | | V1 | V2 | V3 |
 |---|---|---|---|
@@ -48,8 +49,8 @@ the full data shows they are not.)
 | Version | Train F1 | **Test F1** | Test precision | Test recall | Test flagged / caught / false alarms |
 |---|---:|---:|---:|---:|---|
 | V1 | 0.1364 | **0.1370** | 0.0766 | 0.6492 | 42,802 / 3,279 / 39,523 |
-| V2 (deployed) | 0.5255 | **0.5224** | 0.5896 | 0.4690 | 4,018 / 2,369 / 1,649 |
-| V3 | 0.5610 | **0.5539** | 0.6651 | 0.4746 | 3,604 / 2,397 / 1,207 |
+| V2 | 0.5255 | **0.5224** | 0.5896 | 0.4690 | 4,018 / 2,369 / 1,649 |
+| V3 (deployed) | 0.5610 | **0.5539** | 0.6651 | 0.4746 | 3,604 / 2,397 / 1,207 |
 
 **No overfitting.** For every version, test F1 is level with train F1.
 Isolation Forest never sees the labels, so the in-sample numbers in
@@ -91,7 +92,7 @@ now logs any future rollback automatically.
 
 ### Reason
 
-**Not recorded at the time. Awaiting confirmation from the team.**
+**Not recorded.** Nobody on the team could recall a reason (checked 14 Nov 2026), so the history entry says exactly that.
 
 On the review file, V3 was the better model, according to the upload result files on Ashwin's Mac:
 
@@ -106,19 +107,25 @@ consistent with a rollback made to keep the review dataset's anomaly count
 at the documented 120. Until whoever made the change confirms that, it
 remains an inference and is not recorded as the reason.
 
-### Why V2 stays deployed
+### Re-promotion (14 Nov 2026)
 
-V3 is the better detector on unseen data (section 2), so the rollback cost
-some accuracy. V2 is still the one deployed because:
+With no recorded reason for the rollback, the team re-promoted V3 on the
+held-out evidence in section 2. `record_manual_promotion(3, reason)` in
+`optimization/model_evolution.py` logged it as a `manual_promotion` event, so
+the history reads: V3 promoted, rolled back by hand, re-promoted by hand.
+The models page shows it as "Re-promoted by hand: V2 -> V3".
 
-- the rollback has not been reversed, and its reason is unconfirmed; and
-- Smart Storage, Early Warning and the stream processor were tuned and
-  evaluated on V2's scores, so re-promoting V3 means rerunning
-  `scripts/optimize_storage_policy.py` (about 1.5 minutes on all blocks)
-  and checking the stream.
+What was rerun for V3:
 
-Re-promoting V3 is a team decision. `record_rollback(3, reason)` in
-`optimization/model_evolution.py` does it and logs it.
+- **Smart Storage** (`scripts/optimize_storage_policy.py`): the policy is
+  tuned to the live model's scores. With V3 it saves 68.71% of lines and
+  reaches weighted retention 0.955 on the held-out half, which meets the 0.95
+  target that V2 missed (0.948).
+- **Held-out comparison** and **Autoencoder comparison**, so their
+  "deployed" labels and baseline match the live model.
+- **Early Warning** needed no rerun: it has its own per-k models. The stream
+  processor loads whichever model is live; V3 uses only `block_size` and
+  `event_frequency`, which the stream computes exactly as batch does.
 
 ### A bug the rollback exposed (fixed)
 

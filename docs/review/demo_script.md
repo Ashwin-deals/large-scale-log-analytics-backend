@@ -18,8 +18,8 @@ this script before rehearsing.
 |---|---|---|---|
 | 0:00 | Dashboard | "MorphGuard reads system logs, groups them into blocks and flags unusual ones with an Isolation Forest. A genetic algorithm keeps tuning it." | KPIs, Model Status (real state), blocks-and-anomalies chart |
 | 0:40 | Detection Results | "Each row is one block. Analysts can confirm or reject an alert, and the next retrain learns from it." | Click **Real** on a top row; mention Export CSV |
-| 1:20 | Models | "A new model replaces the live one only if its F1 is higher. V3 was promoted, then rolled back by hand; the log records it. On unseen data V3 is actually better, 0.555 vs 0.528, and that decision is the team's." | Lineage, Held-out Evaluation card, Autoencoder table |
-| 2:10 | Smart Storage | "The GA also learns what to keep. On held-out blocks it saves two-thirds of the lines, keeps 94% of anomalies in full, and beats every simple rule." | KPIs, baselines chart, move one slider |
+| 1:20 | Models | "A new model replaces the live one only if its F1 is higher. V3 was promoted, rolled back by hand with no recorded reason, and re-promoted by the team because it wins on unseen data, 0.555 vs 0.528. Every step is in the log." | Lineage, Held-out Evaluation card, Autoencoder table |
+| 2:10 | Smart Storage | "The GA also learns what to keep. On held-out blocks it saves over two-thirds of the lines, keeps 95% of anomalies in full, and beats every simple rule." | KPIs, baselines chart, move one slider |
 | 3:00 | Log source → OpenStack, then Django | "All five sources run through the same pipeline. Each page says what kind of labels it has: OpenStack is a case study (it catches 0 of the 4 documented faulty instances), Django is synthetic." | Source badge, OpenStack caught-0-of-4, Django dashboard |
 | 3:50 | Live Stream | "The same models run live on Kafka." | Start processor + producer; alerts arrive |
 | 4:40 | Close | "Limitations we are upfront about: the labels behind the extra sources, storage measured in lines not bytes, and early warning that is only truly early at k = 20." | |
@@ -33,10 +33,11 @@ Data: 575,061 blocks, 2.93% anomalous.
 | | In-sample F1 | Held-out F1 (5 splits) |
 |---|---|---|
 | V1 baseline | 0.1191 | 0.128 ± 0.008 |
-| **V2 GA-optimized (live)** | **0.5288** | **0.528 ± 0.014** |
-| V3 (rolled back) | 0.5622 | 0.555 ± 0.009 (best on all 5 splits) |
+| V2 GA-optimized | 0.5288 | 0.528 ± 0.014 |
+| **V3 GA-optimized (live)** | **0.5622** | **0.555 ± 0.009** (best on all 5 splits) |
 
-V2 uses 3 of 7 features, 150 trees and contamination 0.0235. Held-out: refit on 70% of all 575,061 blocks,
+V3 uses 2 of 7 features (`block_size`, `event_frequency`), 75 trees and contamination 0.0209. It was
+rolled back by hand on 9 Sep and re-promoted on 14 Nov. Held-out: refit on 70% of all 575,061 blocks,
 scored on the unseen 30% (`holdout_comparison.json`).
 
 ### Autoencoder vs Isolation Forest
@@ -45,16 +46,16 @@ Same held-out splits, same alert rate (`autoencoder_comparison.json`).
 
 | Detector | Test F1 | ROC AUC |
 |---|---|---|
-| Isolation Forest | 0.528 ± 0.014 | 0.895 |
-| Autoencoder, V2's 3 features | 0.518 ± 0.137 | 0.754 |
-| Autoencoder, all 7 features | 0.292 ± 0.153 | 0.801 |
+| Isolation Forest (V3) | 0.555 ± 0.009 | 0.936 |
+| Autoencoder, V3's 2 features | 0.346 ± 0.189 | 0.718 |
+| Autoencoder, all 7 features | 0.285 ± 0.157 | 0.801 |
 
 ### Smart Storage on HDFS
 
-Held-out half of all blocks, after the WARM fix:
-- 66.4% of lines saved
-- 0.942 of anomalies kept in full; weighted retention 0.948, just under the 0.95 target (the tuning half meets it)
-- WARM summaries keep 11 of a block's 23 lines on average
+Held-out half of all blocks, after the WARM fix, scored by V3:
+- 68.7% of lines saved
+- 0.953 of anomalies kept in full; weighted retention 0.955, which meets the 0.95 target
+- WARM is a small tier: 9.5% of blocks, about 2 of 23.5 lines each
 - beats every baseline
 
 ### Early warning on HDFS
@@ -76,7 +77,7 @@ Held-out test sets. The labels are not ground truth.
 
 ### Stream verification
 
-A replay of 1,000,000 HDFS lines:
+A replay of 1,000,000 HDFS lines (made while V2 was live):
 - **Complete blocks:** block-verdict precision 0.986, recall 0.934, false-alarm rate 1.39%.
 - **Early warning:** precision 0.955 on complete blocks, 0.923 on cut-off ones.
 - **Django replay:** matches batch exactly, with 161 anomalous users.
@@ -84,24 +85,23 @@ A replay of 1,000,000 HDFS lines:
 ## Likely questions
 
 **Why Isolation Forest and not a neural network?**
-We tested an Autoencoder on the same five held-out splits of all blocks. With V2's three features it
-averages about the same F1 (0.518 against 0.528), but it swings ten times as much from split to split
-(±0.137 against ±0.014) and ranks anomalies clearly worse (AUC 0.754 against 0.895). With all seven
-features it drops to 0.292. Isolation Forest also needs no labels and no feature scaling.
+We tested an Autoencoder on the same five held-out splits of all blocks. With V3's two features it
+averages F1 0.346 against 0.555, swings twenty times as much from split to split (±0.189 against
+±0.009; it collapses to 0.09 on one split) and ranks anomalies clearly worse (AUC 0.718 against 0.936).
+With all seven features it drops to 0.285. Isolation Forest also needs no labels and no feature scaling.
 
-**Why is F1 only about 0.53?**
-It is unsupervised: the model never sees the labels. At a 2.35% alert rate it catches about half the
+**Why is F1 only about 0.55?**
+It is unsupervised: the model never sees the labels. At a 2.1% alert rate it catches about half the
 anomalies, and two in three of its alerts are real. A supervised model would score higher, but it needs
 labels that a live system does not have.
 
 **Your published F1 is in-sample. Isn't that cheating?**
-We report both. On unseen blocks test F1 matches train F1 (0.522 against 0.526 for V2), so there is no overfitting.
+We report both. On unseen blocks test F1 matches train F1 (0.554 against 0.561 for V3), so there is no overfitting.
 
 **Why was V3 rolled back if it scored higher?**
-It was a manual override, recorded in the history log, and on unseen data V3 really is better (0.555 against
-0.528, on all five splits). V2 stays live for now because Smart Storage, Early Warning and streaming were
-tuned on it; re-promoting V3 is a team decision. *The reason for the rollback itself is still being
-confirmed by the team.*
+It was a manual override, and nobody recorded why; the history log says so plainly rather than guessing.
+On unseen data V3 really is better (0.555 against 0.528, on all five splits), so the team re-promoted it on
+14 Nov, re-tuned Smart Storage for it, and logged that too.
 
 **How do you avoid promoting a lucky model?**
 Promotion needs strictly higher F1, and every decision is logged. For non-HDFS sources the candidate and
@@ -110,8 +110,8 @@ corrected labels before the comparison.
 
 **How can a summary "keep" an anomaly?**
 A WARM summary only counts in proportion to how much of the block it keeps, with full credit at 25% of the
-block. Almost all retention now comes from fully kept anomalies (0.942); weighted retention is 0.948, just
-under the 0.95 target on unseen blocks. Savings are counted in log lines, not bytes.
+block. Almost all retention now comes from fully kept anomalies (0.953); weighted retention is 0.955, which
+meets the 0.95 target on unseen blocks. Savings are counted in log lines, not bytes.
 
 **Is early warning really early?**
 Only at k = 20. At smaller k, the precision comes from short blocks that had already ended. Three
