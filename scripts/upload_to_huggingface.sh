@@ -18,10 +18,13 @@ if [ "$blocks" -ne 575061 ]; then
   exit 1
 fi
 
-# SKIP_SOURCES="cloudtrail apache" leaves out sources whose licence does not allow re-hosting.
+# CloudTrail is never uploaded: no licence was found for the flAWS logs, so
+# scripts/download_dataset.py fetches them from the original archive instead,
+# and its vocabulary is rebuilt from them. SKIP_SOURCES="apache" leaves out
+# any other source whose licence turns out not to allow re-hosting.
 skipped() { case " ${SKIP_SOURCES:-} " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
-for s in openstack apache cloudtrail django; do
+for s in openstack apache django; do
   if skipped "$s"; then
     echo "skip $s: in SKIP_SOURCES"
   elif [ -d "data/raw/$s" ]; then
@@ -34,7 +37,7 @@ up data/features/features.csv derived/hdfs/features.csv
 up data/processed/block_metadata.csv derived/hdfs/block_metadata.csv
 up data/processed/dataset_stats.json derived/hdfs/dataset_stats.json
 up data/features/category_encoders.json derived/vocab/hdfs/category_encoders.json
-for s in openstack apache cloudtrail django; do
+for s in openstack apache django; do
   f="data/features/$s/category_encoders.json"
   if [ -f "$f" ]; then
     up "$f" "derived/vocab/$s/category_encoders.json"
