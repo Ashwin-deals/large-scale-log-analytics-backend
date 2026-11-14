@@ -16,7 +16,11 @@ The Atlas password, a Hugging Face token and the VM's JWT secret were exposed in
 
 1. **Atlas:** change the database user's password. Put the new URI in `.env` on your laptop and on the VM, as `MONGO_URI`.
 2. **JWT secret:** generate a new one with `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Set it as `JWT_SECRET` in the VM's `.env`. Everyone has to sign in again afterwards.
-3. **Hugging Face:** delete the old token at huggingface.co/settings/tokens.
+3. **Hugging Face:** delete the old token at huggingface.co/settings/tokens. Then create a new token for the VM:
+   - Type **Read** (or fine-grained with read access to `Ashwin-deals/large-scale-log-analytics-hdfs-data` only). The VM never needs to write.
+   - Name it after the VM, e.g. `morphguard-vm`, so it can be revoked on its own.
+   - Set it as `HF_TOKEN` in the VM's `.env`. It's needed because the dataset is private (the CloudTrail logs have no confirmed licence). Without it the data download in step 2 fails with a 401.
+   - Paste it straight into the VM's `.env`; don't send it through chat or commit it.
 
 `vm_deploy.sh` refuses to run while `JWT_SECRET` is still the default.
 
@@ -38,7 +42,7 @@ gcloud compute instances add-tags morphguard-vm --zone asia-south1-a --tags=http
 gcloud compute ssh morphguard-vm --zone asia-south1-a
 # on the VM: the kit arrives with the first pull; run it from the checkout
 cd ~/large-scale-log-analytics-backend && git fetch origin && git checkout main && git merge --ff-only origin/main
-nano .env    # MONGO_URI (new), JWT_SECRET (new), CORS_ORIGIN=https://morphguard.duckdns.org
+nano .env    # MONGO_URI (new), JWT_SECRET (new), HF_TOKEN (read-only, new), CORS_ORIGIN=https://morphguard.duckdns.org
 DRY_RUN=1 bash deploy/vm_deploy.sh        # read the plan
 bash deploy/vm_deploy.sh                  # do it (about 10 minutes, most of it the data download)
 ```
