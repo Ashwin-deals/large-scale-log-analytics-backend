@@ -69,8 +69,11 @@ python3 scripts/download_dataset.py
 ```
 
 This downloads the HDFS log (~1.5GB) and anomaly labels from Hugging Face into `data/raw/hdfs/`.
-`python3 scripts/download_dataset.py --source all` also fetches the OpenStack, Apache, CloudTrail
-and Django logs (~320MB) into `data/raw/<source>/`; `--source openstack` etc. fetches one.
+`python3 scripts/download_dataset.py --source all` also fetches the OpenStack, Apache and Django logs
+from Hugging Face, and the CloudTrail logs (~250MB) from the original flAWS.cloud archive, into
+`data/raw/<source>/`; `--source openstack` etc. fetches one. CloudTrail is not re-hosted because no
+licence was found for it; every file is checked against a known SHA-256, and
+`python3 scripts/run_source_pipeline.py --source cloudtrail` rebuilds its vocabulary.
 
 ### 6. Start the API Server
 

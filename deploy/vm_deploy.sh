@@ -58,7 +58,7 @@ cd "$BACKEND_DIR"
 run venv/bin/pip install -q -r requirements.txt
 
 if [ "$SKIP_DATA" != 1 ]; then
-  say "3/6 Data from Hugging Face (raw logs, HDFS derived files, every vocabulary)"
+  say "3/6 Data: Hugging Face (raw logs, HDFS derived files, vocabularies) and CloudTrail from flAWS"
   run venv/bin/python scripts/download_dataset.py --source all --with-derived
 
   say "4/6 Rebuild each source's features, labels and block metadata"
