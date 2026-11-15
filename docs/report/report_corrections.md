@@ -5,13 +5,13 @@ Most of the draft is still right. The stale parts come from three changes:
 
 - **V3 re-promotion (14 Nov).** Every HDFS number that depended on the live model has changed.
 - **The other sources were rerun (12–14 Nov).** This changed Apache's detection numbers and the storage numbers for all four other sources.
-- **The test suite grew** from 163 tests in 9 files to 204 tests in 13 files.
+- **The test suite grew** from 163 tests in 9 files to 207 tests in 13 files.
 
 ## A. Wrong numbers or statements (must fix)
 
 | # | Where | Draft says | Change to |
 |---|---|---|---|
-| 1 | Abstract; §5.1 Table 4; §6 "Error handling"; §7 Conclusion; Table 9 | 163 automated tests (1 skipped), 9 test files | **204 automated tests in 13 files** (1 is skipped only when the CloudTrail data is not downloaded) |
+| 1 | Abstract; §5.1 Table 4; §6 "Error handling"; §7 Conclusion; Table 9 | 163 automated tests (1 skipped), 9 test files | **207 automated tests in 13 files** (1 is skipped only when the CloudTrail data is not downloaded) |
 | 2 | Abstract | "raises F1 from 0.119 (untuned) to 0.529" | "raises F1 from 0.119 (untuned) to **0.562** (deployed model V3; **0.555** on held-out data)" |
 | 3 | Abstract | "Smart Storage saves 68.76% of lines at a weighted retention of 0.9676" | "Smart Storage saves **68.71%** of lines at a weighted retention of **0.955** of anomalous blocks on held-out data" |
 | 4 | Table 5, V2 row | "In-sample; held-out F1 0.528" | Same text, plus "**retired**" |

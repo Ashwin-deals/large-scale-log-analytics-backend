@@ -14,6 +14,8 @@ MorphGuard is an evolutionary real-time log analytics and anomaly detection syst
 - **A Kafka streaming layer**: runs those models on logs as they arrive.
 - **OpenStack**: a second labeled log source, kept separate from HDFS.
 
+The live HDFS model is V3. It was rolled back to V2 by hand on 9 Sep (reason not recorded) and re-promoted on 14 Nov. HDFS, OpenStack, Apache and Django are downloaded from a public Hugging Face dataset; CloudTrail is fetched from the original flAWS archive and is not hosted. Smart Storage meets the 0.95 retention target on every source except Apache (weighted 0.945).
+
 ---
 
 ## 2. High-Level Architecture Diagram
@@ -167,11 +169,11 @@ At k ≤ 10, most correct alerts are short blocks that had already ended (1,826 
   - A status document is upserted every 2 s and served by `GET /api/stream/status`.
   - An early warning's lead time is written back onto its alert once the block finishes.
 - **Limitations:**
-  - HDFS has no "block finished" event, so completion means a timeout. In the 1,000,000-line verification replay, 34,321 of 36,279 timed-out blocks had more lines later, and whole-block verdicts on those partial blocks were mostly false (precision 0.145). On truly complete blocks precision was 0.986 and the false-alarm rate 1.39%. Early warning stayed precise in both cases (0.92 to 0.96). See `docs/streaming_guide.md` and `data/evaluation/stream_run_report.json`.
+  - HDFS has no "block finished" event, so completion means a timeout. The HDFS default is 43,663 s of log time, the smallest value that never closes 99% of blocks early (`scripts/measure_block_gaps.py`; the old 3,600 s covered 39.3%). In the 1,000,000-line verification replay with V3 live, no block was closed early. On truly complete blocks, block-verdict precision was 0.937, recall 0.962 and the false-alarm rate 6.85%. Blocks still running at the end of the replay are flushed and scored on part of their life, so those verdicts are mostly false. Early warning stayed precise in both cases (0.92 to 0.96). See `docs/streaming_guide.md` and `data/evaluation/stream_run_report.json`.
   - Per-block state is in memory, so it does not survive a restart.
 
 ### 3.9 OpenStack Source (`parser/openstack_parser.py`, `multi_source/`)
-OpenStack (LogHub nova logs) is a second labeled source. It reuses the HDFS cleaner, feature extractor, Isolation Forest and GA, with its own vocabulary, models, versions and metrics under `data/models/openstack/` and `data/evaluation/openstack_*`. The HDFS V2 model is never touched.
+OpenStack (LogHub nova logs) is a second labeled source. It reuses the HDFS cleaner, feature extractor, Isolation Forest and GA, with its own vocabulary, models, versions and metrics under `data/models/openstack/` and `data/evaluation/openstack_*`. The HDFS models are never touched.
 - **Blocks:** one block is one VM instance session. Lines without an instance id are dropped: 156,083 of 207,820 lines, leaving 49,675 events in 2,069 sessions.
 - **Labels:** a session is labeled by the file it came from. Sessions from `openstack_abnormal.log` are Anomaly: 198 of 2,069, or 9.57%.
 

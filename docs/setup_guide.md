@@ -58,8 +58,9 @@ JWT_SECRET=your-secure-random-secret-here
 # Dashboard CORS origin
 CORS_ORIGIN=http://localhost:3000
 
-# Hugging Face token (only needed for gated datasets)
-HF_TOKEN=your-huggingface-token
+# The Hugging Face dataset is public, so HF_TOKEN is optional and should stay empty.
+# Used only by scripts/download_dataset.py.
+HF_TOKEN=
 ```
 
 ### 5. Download the Dataset

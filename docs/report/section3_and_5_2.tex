@@ -79,7 +79,7 @@ Operational data lives in a MongoDB Atlas database (\texttt{users}) with five co
 \textbf{File-based model registry.} Model artefacts are deliberately not stored in MongoDB: they are large binary files that must be versioned with the code. For each log source:
 \begin{itemize}
   \item \texttt{current\_version.json} points to the live model, with its file, metrics and promotion time;
-  \item \texttt{version\_history.json} is an append-only lineage of every promotion, rejection, refit, rollback and manual re-promotion, with the reason for each;
+  \item \texttt{version\_history.json} is an append-only lineage of every promotion, rejection, refit, rollback and manual re-promotion, with the reason for each where one was given (the 9 Sep rollback's reason was not recorded);
   \item every model is stamped with the category vocabulary it was trained on, and scoring refuses to run if that vocabulary has changed.
 \end{itemize}
 
