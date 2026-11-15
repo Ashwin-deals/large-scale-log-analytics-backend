@@ -75,10 +75,14 @@ Held-out test sets. The labels are not ground truth.
 | CloudTrail | weak rules | 0.115 | 0.615 | 155 of 211 | 11.1% |
 | Django | synthetic | 0.158 | 0.436 | 17 of 24 | 71.0% |
 
+Only Apache is below the 0.95 retention target (weighted 0.945). CloudTrail is fetched from the original
+flAWS archive and is not hosted on Hugging Face.
+
 ### Stream verification
 
-A replay of 1,000,000 HDFS lines (made while V2 was live):
-- **Complete blocks:** block-verdict precision 0.986, recall 0.934, false-alarm rate 1.39%.
+A replay of 1,000,000 HDFS lines (V3 live, 43,663 s HDFS idle timeout):
+- **Complete blocks:** block-verdict precision 0.937, recall 0.962, false-alarm rate 6.85%.
+- **No block closed early:** 0 timed out, 0 late events (the old 1-hour timeout closed 34,321 blocks early).
 - **Early warning:** precision 0.955 on complete blocks, 0.923 on cut-off ones.
 - **Django replay:** matches batch exactly, with 161 anomalous users.
 
@@ -143,4 +147,4 @@ to score against a vocabulary that renumbered its codes.
 **What is still not done?**
 - Durable stream state across restarts.
 - Cloud connectors: CloudWatch, Azure and GCP need provider credentials.
-- A longer HDFS idle timeout or completion signal. The 1-hour timeout closes most blocks too early.
+- A real HDFS completion signal. The 43,663 s idle timeout covers 99% of blocks; the longest 1% are still closed early.

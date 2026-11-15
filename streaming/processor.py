@@ -13,7 +13,8 @@ For every line on logs.raw:
      the same way real time would), finalize it: deployed-model score (an
      Anomaly verdict raises a `block_anomaly` alert) and Smart Storage tier
 
-Alerts go to the `alerts` topic and the MongoDB collection stream_alerts;
+Alerts go to the `alerts` topic and the MongoDB collection stream_alerts
+(--no-mongo: Kafka only, for offline replays);
 storage decisions go to `storage.decisions`. A status document (events/sec,
 blocks in flight, alert counts, storage saved so far) is upserted into
 stream_status every couple of seconds for GET /api/stream/status.
@@ -27,7 +28,7 @@ memory, so a restarted processor starts its blocks fresh.
 
 Usage:
     python3 -m streaming.processor
-    python3 -m streaming.processor --k 5 10 20 --idle-timeout 3600 --stop-after-idle 30
+    python3 -m streaming.processor --k 5 10 20 --idle-timeout 43663 --stop-after-idle 30
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from parser.hdfs_parser import HDFSParser  # noqa: E402
 from streaming.block_state import BlockState, StreamEncoder, parse_event  # noqa: E402
+from streaming.sources import HDFS_IDLE_TIMEOUT_SECONDS  # noqa: E402
 from streaming.config import (  # noqa: E402
     BOOTSTRAP_SERVERS,
     CONSUMER_GROUP,
@@ -57,7 +59,7 @@ from streaming.config import (  # noqa: E402
 )
 
 DEFAULT_KS = (20,)
-DEFAULT_IDLE_TIMEOUT_SECONDS = 3600  # log time
+DEFAULT_IDLE_TIMEOUT_SECONDS = HDFS_IDLE_TIMEOUT_SECONDS  # log time; why this value: streaming/sources.py
 DEFAULT_IDLE_FLUSH_SECONDS = 10.0  # wall time
 RATE_WINDOW_SECONDS = 5.0
 STATUS_EVERY_SECONDS = 2.0
@@ -320,6 +322,20 @@ class MongoSink:
         self.status_collection.replace_one({"_id": status["_id"]}, status, upsert=True)
 
 
+class NullSink:
+    """--no-mongo: alerts and decisions still go to Kafka, nothing to MongoDB.
+    For offline replays (scripts/analyze_stream_run.py reads Kafka only)."""
+
+    def save_alerts(self, alerts):
+        pass
+
+    def record_leads(self, decisions):
+        pass
+
+    def save_status(self, status):
+        pass
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Consume logs.raw, raise early warnings, publish storage decisions.")
     parser.add_argument("--bootstrap", default=BOOTSTRAP_SERVERS)
@@ -330,7 +346,8 @@ def parse_args(argv=None):
                         help="prefix lengths to alert at (default: the source's best trade-off k; models must exist)")
     parser.add_argument("--idle-timeout", type=int, default=None,
                         help="finalize a block after this many seconds of log time without an event "
-                             "(default per source: hdfs/openstack/cloudtrail 3600, apache 120, django never; 0 = never)")
+                             f"(default per source: hdfs {HDFS_IDLE_TIMEOUT_SECONDS}, openstack/cloudtrail 3600, apache 120, "
+                             "django never; 0 = never)")
     parser.add_argument("--idle-flush", type=float, default=DEFAULT_IDLE_FLUSH_SECONDS,
                         help="when the topic is quiet this many wall seconds, finalize every block in flight")
     parser.add_argument("--stop-after-idle", type=float, default=None,
@@ -338,13 +355,14 @@ def parse_args(argv=None):
     parser.add_argument("--from-beginning", action="store_true", help="new group id, read logs.raw from offset 0")
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--batch-size", type=int, default=1000)
+    parser.add_argument("--no-mongo", action="store_true",
+                        help="publish to Kafka only; skip the MongoDB alert/status sink (offline replays)")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     from confluent_kafka import Consumer, KafkaException, Producer
 
-    from db import stream_alerts, stream_status
     from source_context import get_context
     from streaming.scoring import scorer_for
     from streaming.sources import best_k, line_parser, topic_for
@@ -359,7 +377,12 @@ def main(argv=None):
     processor = StreamProcessor(scorer_for(args.source, ks), ks=ks, idle_timeout_seconds=idle_timeout,
                                 run_id=args.run_id, encoder=encoder, source=args.source, parser=line_parser(args.source))
     topic = topic_for(args.source)
-    sink = MongoSink(stream_alerts, stream_status)
+    if args.no_mongo:
+        sink = NullSink()
+    else:
+        from db import stream_alerts, stream_status
+
+        sink = MongoSink(stream_alerts, stream_status)
     group = f"{args.group}-{processor.run_id}" if args.from_beginning else args.group
     consumer = Consumer({
         "bootstrap.servers": args.bootstrap,

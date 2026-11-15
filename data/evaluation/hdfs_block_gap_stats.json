@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-11-15T11:15:56+05:30",
+  "raw_log": "data/raw/hdfs/HDFS.log",
+  "definition": "per block, the longest log-time gap in seconds between two consecutive lines of that block (file order, keyed by the first blk_ id in the line, as the producer keys messages)",
+  "scan": {
+    "lines": 11175629,
+    "lines_with_block": 11175629,
+    "time_inversions": 0
+  },
+  "blocks": 575061,
+  "single_line_blocks": 2683,
+  "longest_gap_seconds": {
+    "p50": 6848.0,
+    "p90": 28514.0,
+    "p95": 38227.0,
+    "p99": 43663.0,
+    "p99.9": 46261.0,
+    "max": 53611,
+    "mean": 11996.45221115673
+  },
+  "coverage_by_timeout": {
+    "3600": 0.39276702819353077,
+    "7200": 0.5119665565913877,
+    "21600": 0.7335691344048718,
+    "43200": 0.9865753372250944,
+    "86400": 1.0
+  },
+  "target_share": 0.99,
+  "smallest_timeout_covering_target_seconds": 43663,
+  "coverage_at_chosen": 0.9900045386489433
+}

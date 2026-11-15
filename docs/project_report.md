@@ -86,6 +86,7 @@ The primary evaluation uses the HDFS_v1 benchmark from LogHub:
 - **Raw log lines**: 11,175,629 (11,173,511 events after cleaning)
 - **Unique blocks**: 575,061
 - **Ground truth**: 16,838 anomalous blocks (2.93%)
+- **Where the raw data comes from**: HDFS, OpenStack, Apache and Django are downloaded from a public Hugging Face dataset. CloudTrail is fetched from the original flAWS archive and is not hosted.
 
 ### Performance progression (in-sample)
 
@@ -95,7 +96,7 @@ Every model is scored on all 575,061 blocks, the same blocks it was fitted on (`
 |---|---|---|---|---|
 | V1 baseline Isolation Forest | 0.0656 | 0.6514 | 0.1191 | Default sklearn settings, all 7 features |
 | V2 GA-optimized | 0.6037 | 0.4705 | 0.5288 | 3 of 7 features, 150 trees, contamination 0.0235 |
-| **V3 GA-optimized (deployed)** | **0.7069** | **0.4666** | **0.5622** | 2 of 7 features, 75 trees, contamination 0.0209. Promoted 9 Sep, rolled back by hand the same day, re-promoted 14 Nov |
+| **V3 GA-optimized (deployed)** | **0.7069** | **0.4666** | **0.5622** | 2 of 7 features, 75 trees, contamination 0.0209. Promoted 9 Sep, rolled back by hand the same day (reason not recorded), re-promoted 14 Nov |
 
 ### Held-out performance
 
@@ -258,22 +259,23 @@ Every source streams: `producer.py` and `processor.py` take `--source`. Each sou
 - **API:** `GET /api/stream/status` serves live counters (events/sec, blocks in flight, alert counts, storage saved so far) and `GET /api/stream/alerts` serves the alerts. The dashboard's Live Stream page polls both.
 - **Setup:** `docs/streaming_guide.md` has the exact start-up commands.
 
-**Verification replay (B3).** The first 1,000,000 HDFS lines (about 3.5 hours of log time) were replayed at full speed, run id `b3-1m`, while V2 was the live model. `scripts/analyze_stream_run.py` read every decision and alert back from Kafka and joined them with `anomaly_label.csv`. A block counts as **complete** only if all of its lines in the full `HDFS.log` fell inside the replay (`data/evaluation/stream_run_report.json`).
+**Verification replay (B3).** The first 1,000,000 HDFS lines (about 3.5 hours of log time) were replayed at full speed, run id `b3-1m-v3`, with V3 live and the 43,663 s HDFS idle timeout. `scripts/analyze_stream_run.py` read every decision and alert back from Kafka and joined them with `anomaly_label.csv`. A block counts as **complete** only if all of its lines in the full `HDFS.log` fell inside the replay (`data/evaluation/stream_run_report.json`).
 
 | Blocks (66,167 decided) | Blocks | Anomaly share | Block-anomaly precision | Recall | False-alarm rate |
 |---|---:|---:|---:|---:|---:|
-| Complete | 2,528 | 51.5% | **0.986** | **0.934** | **1.39%** |
-| Cut off | 63,639 | 2.6% | 0.049 | 0.180 | 9.31% |
+| Complete | 2,528 | 51.5% | **0.937** | **0.962** | **6.85%** |
+| Cut off | 63,639 | 2.6% | 0.027 | 0.477 | 46.6% |
 
 | Early warning (k = 20) | Blocks reaching 20 events | Alerts | True | Precision | Recall | False-alarm rate |
 |---|---:|---:|---:|---:|---:|---:|
 | Complete blocks | 88 | 22 | 21 | **0.955** | 0.247 | — (3 normal blocks) |
-| Cut-off blocks | 1,560 | 142 | 131 | **0.923** | 0.784 | 0.79% |
+| Cut-off blocks | 2,172 | 142 | 131 | **0.923** | 0.728 | 0.55% |
 
-- **Lead time on complete blocks:** a true early warning fired with a median 28.6% of the block still to come, a median 285 s (4.8 min) before the block's last line. For cut-off blocks the end is outside the replay; the median of 1,758 s to the last line *seen* is only a lower bound.
-- **Complete blocks are mostly anomalous** (51.5% against 2.9% overall), because failing blocks end early. That inflates precision, so the false-alarm rate (1.39% of complete normal blocks; batch V2 is 0.93%) is the fairer number.
-- **The whole-block verdict is unreliable on partial blocks.** That covers 6,071 of 7,303 block-anomaly alerts, nearly all of them false. Early warning does not have this problem: it only scores a block's first 20 events, which a partial block has.
-- **The 1-hour idle timeout is too short for HDFS.** 34,321 of the 36,279 blocks finalized by timeout had more lines later, because HDFS blocks routinely go quiet for hours between write and read or delete. Those blocks look truncated, and timeout-finalized blocks give block-anomaly precision of 0.145 (929 of 6,396).
+- **The HDFS idle timeout is 43,663 s (12.1 h).** It is the smallest value that never closes 99% of blocks early. The measure is the longest log-time gap inside each of the 575,061 blocks in the full `HDFS.log` (`scripts/measure_block_gaps.py`): p50 6,848 s, p95 38,227 s, p99 43,663 s, p99.9 46,261 s, max 53,611 s. The old 3,600 s covered 39.3% of blocks, and in the earlier replay 34,321 of 36,279 timed-out blocks had more lines later. In this replay, no block timed out and there were 0 late events.
+- **Lead time on complete blocks:** a true early warning fired with a median 28.6% of the block still to come, a median 285 s (4.8 min) before the block's last line. For cut-off blocks the end is outside the replay; the median of 1,777 s to the last line *seen* is only a lower bound.
+- **Complete blocks are mostly anomalous** (51.5% against 2.9% overall), because failing blocks end early. That inflates precision, so the false-alarm rate is the fairer number: 6.85% of complete normal blocks, against 0.58% for batch V3 on all blocks.
+- **The whole-block verdict is unreliable on partial blocks.** That covers 29,680 of 31,015 block-anomaly alerts, nearly all of them false. They come from the end-of-stream flush scoring blocks that still had lines to come, which a live stream would keep open. Early warning only scores a block's first 20 events, so partial blocks do not affect it.
+- **Model, not timeout, moved the complete-block numbers.** The earlier run (V2 live, 3,600 s) had precision 0.986, recall 0.934 and a false-alarm rate of 1.39%. A control replay with V3 and the 3,600 s timeout gives exactly the new complete-block numbers (`data/evaluation/stream_run_report_v3_timeout3600.json`).
 
 ---
 
@@ -303,7 +305,7 @@ That leaves 49,675 events in 2,069 sessions, of which 198 (9.57%) are from the a
 - Features: `hour_of_day`, `block_size`, `event_frequency`, `source_ip_encoded`, `destination_ip_encoded`.
 - Hyperparameters: `n_estimators` 175, `max_samples` 0.344, `contamination` 0.187.
 
-**Smart Storage on OpenStack.** On 1,035 held-out sessions (99 anomalies) it saves 22.27% of lines. Weighted, full retention and coverage are all 0.990, meeting the 0.95 target (fixed WARM rule; before it, 31.42% saved at weighted 0.929).
+**Smart Storage on OpenStack.** On 1,035 held-out sessions (99 anomalies) it saves 22.27% of lines. Weighted, full retention and coverage are all 0.990, meeting the 0.95 target (fixed WARM rule; before it, 31.42% saved at weighted 0.929). Across the four extra sources, only Apache is below the 0.95 target (weighted 0.945); CloudTrail reaches 0.958 and Django 0.969.
 
 **Early warning on OpenStack.** The test set has 59 anomalous sessions.
 - At k = 3, 5 and 10, the tuned threshold alerts on every session: precision 0.095 (the base rate), recall 1.0, F1 0.1735.
@@ -362,7 +364,7 @@ Analysts mark detections as real or false alarms (`/api/feedback`, Detection Res
 
 ### 12.3 Still open
 
-1. **Streaming:** per-block state does not survive a restart. HDFS also has no "block finished" event, and the 1-hour idle timeout closes most blocks too early (§8).
+1. **Streaming:** per-block state does not survive a restart. HDFS also has no "block finished" event, so completion is a 43,663 s idle timeout that covers 99% of blocks (§8); the longest 1% are still closed early.
 2. **Multi-tenant isolation:** namespaces per cloud tenant.
 3. **Cloud connectors:** CloudWatch, Azure Monitor and GCP Logging need provider credentials and pull agents. Syslog and Kafka work today.
 

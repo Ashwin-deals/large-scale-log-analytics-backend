@@ -110,7 +110,17 @@ def message_key(parser, message: str) -> bytes | None:
 # a Django block is one user over the whole period, so any timeout would cut
 # users into pieces (late events). Apache blocks are 60-second windows and
 # CloudTrail blocks identity-hours, so they end soon after their window does.
-IDLE_TIMEOUTS = {"hdfs": 3600, "openstack": 3600, "apache": 120, "cloudtrail": 3600, "django": None}
+#
+# HDFS: 43,663 s (12.13 h) of log time, the smallest timeout that never closes
+# 99% of blocks early. scripts/measure_block_gaps.py measured the longest quiet
+# gap inside each of the 575,061 blocks in the full HDFS.log
+# (data/evaluation/hdfs_block_gap_stats.json): p50 6,848 s, p95 38,227 s,
+# p99 43,663 s, p99.9 46,261 s, max 53,611 s. A block is typically written,
+# then read or deleted hours later, so the old 3,600 s covered only 39.3% of
+# blocks and the 1M-line replay closed 34,321 blocks that had more lines to come.
+HDFS_IDLE_TIMEOUT_SECONDS = 43_663
+IDLE_TIMEOUTS = {"hdfs": HDFS_IDLE_TIMEOUT_SECONDS, "openstack": 3600, "apache": 120, "cloudtrail": 3600,
+                 "django": None}
 
 
 def best_k(source: str) -> int:
