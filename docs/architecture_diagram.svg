@@ -36,7 +36,7 @@
   <text x="40" y="202" class="t">Apache — injected</text>
   <text x="40" y="223" class="t">CloudTrail — weak rules</text>
   <text x="40" y="244" class="t">Django — synthetic</text>
-  <text x="40" y="270" class="s">raw data on Hugging Face</text>
+  <text x="40" y="270" class="s">raw logs: Hugging Face, flAWS</text>
 
   <!-- entry paths -->
   <rect x="264" y="110" width="210" height="80" rx="10" class="box ingest"/>
@@ -73,7 +73,7 @@
   <text x="560" y="378" class="t">Isolation Forest on a block's</text>
   <text x="560" y="396" class="t">first k events; alert before</text>
   <text x="560" y="414" class="t">the block finishes</text>
-  <text x="560" y="432" class="s">k = 20: precision 0.85 on HDFS</text>
+  <text x="560" y="432" class="s">k = 20, all blocks: precision 0.85</text>
 
   <rect x="804" y="330" width="230" height="110" rx="10" class="box new"/>
   <text x="820" y="356" class="h">Smart Storage</text>
