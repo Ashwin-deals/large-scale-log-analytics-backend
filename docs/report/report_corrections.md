@@ -65,6 +65,23 @@ All section and subsection headings (1 to 8, 2.1 to 7) match the template, in th
 | D7 | Abstract | 150–250 words | 243 words | After fixes 2–3 in section A it goes just over 250. Write "0.562 (0.555 held-out)" instead of the longer wording, and drop "(1 skipped)". |
 | D8 | Table 9 | Every row filled, status [Completed] | Certifications and TEA 1–3 still "[Fill in]" but marked Completed | Fill them in before submission. |
 
+## E. Second check: G045_Report.pdf (15 Nov)
+
+Every item in sections A and D has been applied, and the abstract is 249 words, so there is no room to add to it. What is still open:
+
+| # | Where | Report has | Fix |
+|---|---|---|---|
+| E1 | Table 10, TEA 2 "Project Website"; §2.1 | The live site described as running the current system | https://morphguard.duckdns.org still serves the 25 Oct build (no V3, no held-out results, no Autoencoder comparison). Redeploy (`deploy/vm_deploy.sh`) before the review, so what examiners see matches the report. |
+| E2 | Figure E1 | The old diagram: "k = 20: precision 0.85 on HDFS", "raw data on Hugging Face" | Replace the image with `docs/report/architecture_diagram.png` (row 24) |
+| E3 | Figure 2 | An older render of the schema: "uploaded_by" overlaps "stored_path", "deployed model version" overlaps the stream_alerts header, and the last rows of uploads ("error") and alert_feedback ("at") are cut off | Use `docs/report/fig2_database_schema.pdf` |
+| E4 | Figures 1 and 2 | 1440 px PNG copies | Use the vector PDFs in `docs/report/`; they stay sharp in print |
+| E5 | Table 8, lead-time rows | 0.339, 10,466 s and 14,110 s with no label | Label them "still-running blocks". Over all test blocks, the median lead time is 0 s and the mean is 5,165 s. |
+| E6 | Table 9, "Autoencoder (V3's two features)" | AUC n/a, fit time n/a | AUC **0.718**, fit time **5.2 s** (`data/evaluation/autoencoder_comparison.json`) |
+| E7 | Table 5, V1 row | Precision n/a, recall n/a | Precision **0.0656**, recall **0.6514** |
+| E8 | Table 4, System / E2E | "the full pipeline re-run from the Hugging Face datasets" | "from the downloaded datasets (Hugging Face and flAWS)" |
+| E9 | §3.1 Persistence tier | MongoDB holds "user accounts, uploads and streaming alerts" | Add analyst feedback, as §3.2 does |
+| E10 | Table 4, System / E2E | Walk-through "with a headless browser and by hand", including upload | The headless walk-through covered every page for all five sources. The steps that write to the database (upload, change password, Real / False alarm, Run Retrain, sign out and back in) still have to be done by hand. Do them before the review (`docs/review/walkthrough_checklist.md`). |
+
 ## C. Still correct (no change)
 
 - V1/V2/V3 in-sample and held-out F1 and the dataset sizes.
