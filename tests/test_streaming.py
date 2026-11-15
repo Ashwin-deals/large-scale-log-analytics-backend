@@ -206,6 +206,38 @@ class StreamProcessorTest(unittest.TestCase):
         self.assertEqual(p.counts["late_events"], 1)
         self.assertNotIn("blk_201", p.blocks)
 
+    def test_hdfs_default_keeps_a_block_open_across_a_long_quiet_gap(self):
+        # A block written, then read hours later: its own gap (4 h) is longer
+        # than the old 3,600 s default but inside the measured-p99 default, so
+        # the block stays open while other blocks move the clock, and its later
+        # lines join it instead of being counted late.
+        from streaming.sources import HDFS_IDLE_TIMEOUT_SECONDS, IDLE_TIMEOUTS
+
+        self.assertEqual(IDLE_TIMEOUTS["hdfs"], HDFS_IDLE_TIMEOUT_SECONDS)
+        gap = 4 * 3600
+        self.assertGreater(gap, 3600)
+        self.assertLess(gap, HDFS_IDLE_TIMEOUT_SECONDS)
+        p = self.make(timeout=IDLE_TIMEOUTS["hdfs"])
+        p.process([hdfs_line(0, "blk_301", pid=1), hdfs_line(1, "blk_301", pid=2)])
+        for step in range(1, 5):  # another block advances the watermark hour by hour
+            _, decisions = p.process([hdfs_line(step * 3600, "blk_302", pid=10 + step)])
+            self.assertEqual(decisions, [])
+        _, decisions = p.process([hdfs_line(gap + 5, "blk_301", pid=3)])
+        self.assertEqual(decisions, [])
+        self.assertEqual(p.counts["late_events"], 0)
+        self.assertEqual(p.blocks["blk_301"].n, 3)
+        # Past the timeout, the block does close.
+        _, decisions = p.process([hdfs_line(gap + 5 + HDFS_IDLE_TIMEOUT_SECONDS + 1, "blk_302", pid=20)])
+        self.assertIn("blk_301", [d["block_id"] for d in decisions])
+
+    def test_old_one_hour_timeout_would_have_closed_that_block_early(self):
+        p = self.make(timeout=3600)
+        p.process([hdfs_line(0, "blk_311", pid=1), hdfs_line(1, "blk_311", pid=2)])
+        _, decisions = p.process([hdfs_line(2 * 3600, "blk_312", pid=3)])
+        self.assertEqual([d["block_id"] for d in decisions], ["blk_311"])
+        p.process([hdfs_line(4 * 3600 + 5, "blk_311", pid=4)])
+        self.assertEqual(p.counts["late_events"], 1)
+
     def test_flush_all_finalizes_everything_in_flight(self):
         p = self.make()
         p.process([hdfs_line(0, "blk_101", pid=1), hdfs_line(1, "blk_102", pid=2)])

@@ -94,3 +94,36 @@ class SyslogTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockGapMeasurementTest(unittest.TestCase):
+    """scripts/measure_block_gaps.py, which the HDFS idle timeout is chosen from."""
+
+    def test_longest_gap_per_block_and_the_smallest_timeout_covering_a_share(self):
+        import tempfile
+        from pathlib import Path
+
+        import numpy as np
+
+        from scripts.measure_block_gaps import coverage_for, longest_gaps, smallest_timeout_covering
+
+        lines = [
+            "081109 200000 1 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /x. blk_1",
+            "081109 200010 2 INFO dfs.DataNode$PacketResponder: Received block blk_1 of size 1 from /10.0.0.1",
+            "081109 200005 3 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /y. blk_2",
+            "081109 230010 4 INFO dfs.FSNamesystem: BLOCK* NameSystem.delete: blk_1 is added to invalidSet",
+            "081110 010005 5 INFO dfs.FSNamesystem: BLOCK* NameSystem.delete: blk_2 is added to invalidSet",
+            "081109 200000 6 INFO dfs.FSNamesystem: BLOCK* NameSystem.allocateBlock: /z. blk_3",
+        ]
+        path = Path(tempfile.mkdtemp()) / "HDFS.log"
+        path.write_text("\n".join(lines) + "\n")
+        gaps, stats = longest_gaps(path)
+        self.assertEqual(gaps, {"blk_1": 3 * 3600, "blk_2": 5 * 3600, "blk_3": 0})
+        self.assertEqual(stats["lines_with_block"], 6)
+
+        values = np.array(list(gaps.values()))
+        self.assertEqual(smallest_timeout_covering(values, 2 / 3), 3 * 3600)
+        self.assertEqual(smallest_timeout_covering(values, 1.0), 5 * 3600)
+        # The processor closes on a gap strictly longer than the timeout.
+        self.assertAlmostEqual(coverage_for(values, 3 * 3600), 2 / 3)
+        self.assertEqual(coverage_for(values, 3 * 3600 - 1), 1 / 3)
