@@ -33,6 +33,8 @@ Most of the draft is still right. The stale parts come from three changes:
 | 20 | §3.2; §6 | version history holds "promote, reject, refit and rollback events" | "promote, reject, refit, rollback and **manual re-promotion** events" |
 | 21 | Title page | Two team members are listed with the same roll number | One of them is wrong. Fix it before submission. |
 | 22 | §4.1 and Table 9 | Frontend "[add the frontend repository URL]" | https://github.com/Akilan-J/large-scale-log-analytics-frontend |
+| 23 | Table 8, first row | "F1 at k=20, all blocks: 0.684" | "All blocks at k=20: precision / recall / F1 **0.849 / 0.572 / 0.684**". Keep the second row (still-running blocks, 0.696 / 0.527 / 0.600): both are correct, they count different blocks. Figure E1's "precision 0.85" is the all-blocks figure. |
+| 24 | Figure E1 (`architecture_diagram.png`) | "k = 20: precision 0.85 on HDFS"; "raw data on Hugging Face" | Replace the image with `docs/report/architecture_diagram.png`, which reads "k = 20, all blocks: precision 0.85" and "raw logs: Hugging Face, flAWS" |
 
 ## B. Check these (I can't verify them from the repo)
 
