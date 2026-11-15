@@ -11,7 +11,8 @@ https://huggingface.co/datasets/Ashwin-deals/large-scale-log-analytics-hdfs-data
   logs, so they come from the author's original archive (Scott Piper / Summit
   Route, ~250MB) and each of the 20 files is checked against a known SHA-256.
 
-If the dataset is private or gated, set HF_TOKEN in .env (or the environment).
+The Hugging Face dataset is public, so HF_TOKEN is optional and should stay empty.
+(The script still passes HF_TOKEN on if one is set.)
 
 --with-derived also fetches what a fresh clone needs to serve the dashboard
 without rebuilding anything (the derived/ folder of the dataset repo):
@@ -36,10 +37,12 @@ import argparse
 import hashlib
 import os
 import shutil
+import ssl
 import tarfile
 import tempfile
 import urllib.request
 
+import certifi
 from dotenv import load_dotenv
 from huggingface_hub import hf_hub_download, snapshot_download
 
@@ -122,7 +125,11 @@ def download_cloudtrail(dest=None, url=None, expected=None):
     with tempfile.TemporaryDirectory() as tmp:
         archive = os.path.join(tmp, "flaws.tar")
         request = urllib.request.Request(url, headers={"User-Agent": "morphguard-download/1.0"})
-        with urllib.request.urlopen(request) as response, open(archive, "wb") as out:
+        # certifi's CA bundle, as db.py does for Atlas: python.org Python on
+        # macOS ships no root certificates, so the default context fails with
+        # CERTIFICATE_VERIFY_FAILED on summitroute.com.
+        context = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(request, context=context) as response, open(archive, "wb") as out:
             shutil.copyfileobj(response, out, 1 << 20)
         with tarfile.open(archive) as tar:
             for member in tar.getmembers():
